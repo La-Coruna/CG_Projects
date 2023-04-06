@@ -9,7 +9,7 @@ g_mouse_button_right_toggle = False
 g_cursor_last_xpos = 0
 g_cursor_last_ypos = 0
 
-g_cam_ang = 0.
+g_cam_ang = 0. # azimuth. z축으로 부터의 각임.
 g_cam_height = .1
 
 g_cam_target_x = 0
@@ -135,10 +135,11 @@ def cursor_callback(window, xpos, ypos):
         yoffset = ypos - g_cursor_last_ypos
         g_cursor_last_xpos, g_cursor_last_ypos = xpos, ypos
         
+        # 거리를 계산한다.
+        
         # set sensitivity
-        sensitivity = 0.1
-        xoffset *= 0.01
-        yoffset *= 0.01
+    
+        # 거리와 
 
         print('mouse_btn_right: true %d %d'%(xoffset,yoffset))
         g_cam_target_x += xoffset

@@ -29,3 +29,4 @@ b = glm.array(np.array([-1.0, .0, -1,  1.0, 1.0, 1.0,], dtype=np.float32)) # dty
 
 print(a == b) # 이제 둘이 같음
 ###################
+normalize는 크기를 1로 만드는 거야.

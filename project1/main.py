@@ -9,12 +9,12 @@ g_mouse_button_right_toggle = False
 g_cursor_last_xpos = 0
 g_cursor_last_ypos = 0
 
-g_cam_ang = 0.
+g_cam_ang = 0. # azimuth. z축으로 부터의 각임.
 g_cam_height = .1
 
-g_cam_target_x = 0
+g_cam_move_right = 0
 g_cam_target_y = 0
-g_cam_target_z = 0
+g_cam_move_up = 0
 
 g_vertex_shader_src = '''
 #version 330 core
@@ -95,15 +95,15 @@ def load_shaders(vertex_shader_source, fragment_shader_source):
 
 
 def key_callback(window, key, scancode, action, mods):
-    global g_key_shift_toggle, g_cam_target_x, g_cam_target_y, g_cam_target_z
+    global g_key_shift_toggle, g_cam_move_right, g_cam_target_y, g_cam_move_up
     if key==GLFW_KEY_ESCAPE and action==GLFW_PRESS:
         glfwSetWindowShouldClose(window, GLFW_TRUE)
     else: # TODO : delete the camera move
         if action==GLFW_PRESS or action==GLFW_REPEAT:
             if key==GLFW_KEY_1:
-                g_cam_target_x += .1
+                g_cam_move_right += .1
             elif key==GLFW_KEY_3:
-                g_cam_target_x += -.1
+                g_cam_move_right += -.1
             elif key==GLFW_KEY_2:
                 g_cam_target_y += .1
             elif key==GLFW_KEY_W:
@@ -111,7 +111,7 @@ def key_callback(window, key, scancode, action, mods):
 
 def cursor_callback(window, xpos, ypos):
     global g_mouse_button_left_toggle, g_cursor_last_xpos, g_cursor_last_ypos, g_cam_ang, g_cam_height
-    global g_mouse_button_right_toggle, g_cam_target_x, g_cam_target_y, g_cam_target_z
+    global g_mouse_button_right_toggle, g_cam_move_right, g_cam_target_y, g_cam_move_up
     if g_mouse_button_left_toggle:
         
         # check the cursor move
@@ -135,14 +135,15 @@ def cursor_callback(window, xpos, ypos):
         yoffset = ypos - g_cursor_last_ypos
         g_cursor_last_xpos, g_cursor_last_ypos = xpos, ypos
         
+        # 거리를 계산한다.
+        
         # set sensitivity
-        sensitivity = 0.1
-        xoffset *= 0.01
-        yoffset *= 0.01
+    
+        # 거리와 
 
         print('mouse_btn_right: true %d %d'%(xoffset,yoffset))
-        g_cam_target_x += xoffset
-        #g_cam_target_z += yoffset
+        g_cam_move_right -= xoffset
+        g_cam_move_up -= yoffset
         
         
         
@@ -331,10 +332,16 @@ def main():
         # rotate camera position with g_cam_ang / move camera up & down with g_cam_height
         # glm.lookAt(camera_pos, camera_target, camera_up)
         
-        cam_pos = glm.vec3(.1*np.sin(g_cam_ang)+g_cam_target_x, g_cam_height, .1*np.cos(g_cam_ang))
-        cam_target = glm.vec3(g_cam_target_x, g_cam_target_y, g_cam_target_z)
-        cam_up = glm.vec3(.0, .1, .0)
-        V = glm.lookAt(cam_pos, cam_target, cam_up)
+        cam_pos = glm.vec3(.1*np.sin(g_cam_ang), g_cam_height, .1*np.cos(g_cam_ang)) # cam_orbit
+        cam_target = glm.vec3(.0,.0,.0)
+        cam_direction = glm.normalize(cam_pos - cam_target) # actually opposite direction
+        print(cam_direction)
+        up = glm.vec3(.0, .1, .0)
+        cam_right = glm.normalize(glm.cross(cam_direction,up))
+        cam_up = glm.normalize(glm.cross(cam_direction,cam_right))
+        
+        cam_pan = (cam_right*g_cam_move_right + cam_up*g_cam_move_up)*0.001
+        V = glm.lookAt(cam_pos+cam_pan, cam_target+cam_pan, up)
 
         #######
         # current frame: P*V*I (now this is the world frame)
