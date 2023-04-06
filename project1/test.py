@@ -14,7 +14,7 @@ g_cam_height = .1
 
 g_cam_target_x = 0
 g_cam_target_y = 0
-g_cam_target_z = 0
+g_cam_target_Z = 0
 
 g_vertex_shader_src = '''
 #version 330 core
@@ -95,7 +95,7 @@ def load_shaders(vertex_shader_source, fragment_shader_source):
 
 
 def key_callback(window, key, scancode, action, mods):
-    global g_key_shift_toggle, g_cam_target_x, g_cam_target_y, g_cam_target_z
+    global g_key_shift_toggle, g_cam_target_x, g_cam_target_y, g_cam_target_Z
     if key==GLFW_KEY_ESCAPE and action==GLFW_PRESS:
         glfwSetWindowShouldClose(window, GLFW_TRUE)
     else: # TODO : delete the camera move
@@ -110,8 +110,7 @@ def key_callback(window, key, scancode, action, mods):
                 g_cam_target_y += -.1
 
 def cursor_callback(window, xpos, ypos):
-    global g_mouse_button_left_toggle, g_cursor_last_xpos, g_cursor_last_ypos, g_cam_ang, g_cam_height
-    global g_mouse_button_right_toggle, g_cam_target_x, g_cam_target_y, g_cam_target_z
+    global g_mouse_button_left_toggle, g_mouse_button_right_toggle, g_cursor_last_xpos, g_cursor_last_ypos, g_cam_ang, g_cam_height, g_cam_target_x, g_cam_target_y, g_cam_target_Z
     if g_mouse_button_left_toggle:
         
         # check the cursor move
@@ -137,12 +136,11 @@ def cursor_callback(window, xpos, ypos):
         
         # set sensitivity
         sensitivity = 0.1
-        xoffset *= 0.01
-        yoffset *= 0.01
+        xoffset *= 0.0001
+        yoffset *= 0.0005
 
         print('mouse_btn_right: true %d %d'%(xoffset,yoffset))
         g_cam_target_x += xoffset
-        #g_cam_target_z += yoffset
         
         
         
@@ -236,26 +234,35 @@ def prepare_vao_frame():
 
 def prepare_vao_grid():
     # prepare vertex data (in main memory)
-    
-    r,g,b = 1., 1., 1.
-    half_size, start, end, line_num =2, -2, 2, 21
-    vertices_for_line_x = glm.array(np.concatenate([
-        [
-        -half_size, .0, np.round_(z,1), r, g, b,
-        half_size, .0, np.round_(z,1), r, g, b
-        ]
-        for z in np.linspace(start, end, line_num)]
-        , dtype=np.float32))
-    
-    vertices_for_line_z = glm.array(np.concatenate([
-        [
-        np.round_(x,1), .0, -half_size, r, g, b,
-        np.round_(x,1), .0, half_size, r, g, b
-        ]
-        for x in np.linspace(start, end, line_num)]
-        , dtype=np.float32))
-
-    vertices = vertices_for_line_x.concat(vertices_for_line_z)
+    vertices = glm.array(glm.float32,
+        # position        # color
+        -1.0, .0, -1.0,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, -1.0,   1.0, 1.0, 1.0, # x-axis end 
+         -1.0, .0, -.8,   1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, -.8,    1.0, 1.0, 1.0, # x-axis end 
+         -1.0, .0, -.6,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, -.6,   1.0, 1.0, 1.0, # x-axis end 
+         -1.0, .0, -.4,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, -.4,   1.0, 1.0, 1.0, # x-axis end 
+        -1.0, .0, -.2,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, -.2,   1.0, 1.0, 1.0, # x-axis end 
+         -1.0, .0, .0,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, .0,   1.0, 1.0, 1.0, # x-axis end 
+         -1.0, .0, .2,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, .2,   1.0, 1.0, 1.0, # x-axis end 
+         -1.0, .0, .4,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, .4,   1.0, 1.0, 1.0, # x-axis end 
+         -1.0, .0, .6,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, .6,   1.0, 1.0, 1.0, # x-axis end 
+         -1.0, .0, .8,   1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, .8,    1.0, 1.0, 1.0, # x-axis end 
+        -1.0, .0, 1.0,  1.0, 1.0, 1.0, # x-axis start
+         1.0, .0, 1.0,   1.0, 1.0, 1.0, # x-axis end 
+        #  0.0, -1.0, 0.0,  0.0, 1.0, 0.0, # y-axis start
+        #  0.0, 1.0, 0.0,   0.0, 1.0, 0.0, # y-axis end 
+        #  0.0, 0.0, -1.0,  0.0, 0.0, 1.0, # z-axis start
+        #  0.0, 0.0, 1.0,   0.0, 0.0, 1.0, # z-axis end 
+    )
 
     # create and activate VAO (vertex array object)
     VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
@@ -312,6 +319,17 @@ def main():
     vao_frame = prepare_vao_frame()
     vao_grid = prepare_vao_grid()
 
+    ###########
+    a = [z for z in range(-1, 1.0, 0.2)]
+    b = np.array(a)
+    print(b)
+    vertices = glm.array( b )
+    print(vertices)
+    
+    
+    ###########
+
+
     # loop until the user closes the window
     while not glfwWindowShouldClose(window):
         # render
@@ -321,67 +339,7 @@ def main():
         glEnable(GL_DEPTH_TEST)
 
         glUseProgram(shader_program)
-
-        # projection matrix
-        # use orthogonal projection (we'll see details later)
-        P = glm.ortho(-1,1,-1,1,-1,1)
-
-        #TODO 
-        # view matrix
-        # rotate camera position with g_cam_ang / move camera up & down with g_cam_height
-        # glm.lookAt(camera_pos, camera_target, camera_up)
         
-        cam_pos = glm.vec3(.1*np.sin(g_cam_ang)+g_cam_target_x, g_cam_height, .1*np.cos(g_cam_ang))
-        cam_target = glm.vec3(g_cam_target_x, g_cam_target_y, g_cam_target_z)
-        cam_up = glm.vec3(.0, .1, .0)
-        V = glm.lookAt(cam_pos, cam_target, cam_up)
-
-        #######
-        # current frame: P*V*I (now this is the world frame)
-        I = glm.mat4()
-        MVP = P*V*I
-        glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
-
-        # draw current frame
-        glBindVertexArray(vao_frame)
-        glDrawArrays(GL_LINES, 0, 6)
-        
-        # draw current grid
-        glBindVertexArray(vao_grid)
-        glDrawArrays(GL_LINES, 0, 84)
-
-        #######
-        # animating
-        t = glfwGetTime()
-
-        # rotation
-        th = np.radians(t*90)
-        R = glm.rotate(th, glm.vec3(0,0,1))
-
-        # tranlation
-        T = glm.translate(glm.vec3(np.sin(t), .2, 0.))
-
-        # scaling
-        S = glm.scale(glm.vec3(np.sin(t), np.sin(t), np.sin(t)))
-
-        M = T
-        # M = T
-        # M = S
-        # M = R @ T
-        # M = T @ R
-
-        # current frame: P*V*M
-        MVP = P*V*M
-        glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
-
-        # draw triangle w.r.t. the current frame
-        glBindVertexArray(vao_triangle)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
-
-        # # draw current frame
-        # glBindVertexArray(vao_frame)
-        # glDrawArrays(GL_LINES, 0, 6)
-
         # swap front and back buffers
         glfwSwapBuffers(window)
 

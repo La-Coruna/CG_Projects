@@ -14,7 +14,7 @@ g_cam_height = .1
 
 g_cam_target_x = 0
 g_cam_target_y = 0
-g_cam_target_z = 0
+g_cam_target_Z = 0
 
 g_vertex_shader_src = '''
 #version 330 core
@@ -95,7 +95,7 @@ def load_shaders(vertex_shader_source, fragment_shader_source):
 
 
 def key_callback(window, key, scancode, action, mods):
-    global g_key_shift_toggle, g_cam_target_x, g_cam_target_y, g_cam_target_z
+    global g_key_shift_toggle, g_cam_target_x, g_cam_target_y, g_cam_target_Z
     if key==GLFW_KEY_ESCAPE and action==GLFW_PRESS:
         glfwSetWindowShouldClose(window, GLFW_TRUE)
     else: # TODO : delete the camera move
@@ -110,8 +110,7 @@ def key_callback(window, key, scancode, action, mods):
                 g_cam_target_y += -.1
 
 def cursor_callback(window, xpos, ypos):
-    global g_mouse_button_left_toggle, g_cursor_last_xpos, g_cursor_last_ypos, g_cam_ang, g_cam_height
-    global g_mouse_button_right_toggle, g_cam_target_x, g_cam_target_y, g_cam_target_z
+    global g_mouse_button_left_toggle, g_mouse_button_right_toggle, g_cursor_last_xpos, g_cursor_last_ypos, g_cam_ang, g_cam_height, g_cam_target_x, g_cam_target_y, g_cam_target_Z
     if g_mouse_button_left_toggle:
         
         # check the cursor move
@@ -137,12 +136,11 @@ def cursor_callback(window, xpos, ypos):
         
         # set sensitivity
         sensitivity = 0.1
-        xoffset *= 0.01
-        yoffset *= 0.01
+        xoffset *= 0.0001
+        yoffset *= 0.0005
 
         print('mouse_btn_right: true %d %d'%(xoffset,yoffset))
         g_cam_target_x += xoffset
-        #g_cam_target_z += yoffset
         
         
         
@@ -238,7 +236,7 @@ def prepare_vao_grid():
     # prepare vertex data (in main memory)
     
     r,g,b = 1., 1., 1.
-    half_size, start, end, line_num =2, -2, 2, 21
+    half_size, start, end, line_num =2, -1, 1, 11
     vertices_for_line_x = glm.array(np.concatenate([
         [
         -half_size, .0, np.round_(z,1), r, g, b,
@@ -331,8 +329,9 @@ def main():
         # rotate camera position with g_cam_ang / move camera up & down with g_cam_height
         # glm.lookAt(camera_pos, camera_target, camera_up)
         
-        cam_pos = glm.vec3(.1*np.sin(g_cam_ang)+g_cam_target_x, g_cam_height, .1*np.cos(g_cam_ang))
-        cam_target = glm.vec3(g_cam_target_x, g_cam_target_y, g_cam_target_z)
+        # cam_pos = glm.vec3(.0, .0, .0)
+        cam_pos = glm.vec3(.1*np.sin(g_cam_ang), g_cam_height, .1*np.cos(g_cam_ang))
+        cam_target = glm.vec3(.0, .0, .0)
         cam_up = glm.vec3(.0, .1, .0)
         V = glm.lookAt(cam_pos, cam_target, cam_up)
 
@@ -348,7 +347,7 @@ def main():
         
         # draw current grid
         glBindVertexArray(vao_grid)
-        glDrawArrays(GL_LINES, 0, 84)
+        glDrawArrays(GL_LINES, 0, 44)
 
         #######
         # animating
