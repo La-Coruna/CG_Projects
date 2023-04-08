@@ -8,7 +8,8 @@ list2 = np.concatenate(list1)
 print(list2)
 
 해주면 딱일듯.
--> 라인 스페이스하면 훨씬 좋음!!!!
+
+격자 만들 때는 라인 스페이스하면 훨씬 좋음!!!!
 np.linspace
 
 

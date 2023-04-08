@@ -4,12 +4,6 @@ import glm
 import ctypes
 import numpy as np
 
-#for debug
-debug_var=1
-g_tx=0
-g_ty=0
-g_tz=0
-
 g_mouse_button_left_toggle = False
 g_mouse_button_right_toggle = False
 g_cursor_last_xpos = 0
@@ -17,7 +11,6 @@ g_cursor_last_ypos = 0
 
 g_cam_azimuth = 0. # azimuth. z축으로 부터의 각임.
 g_cam_elevation = .1
-g_cam_zoom = .0
 
 g_cam_move_right = 0
 g_cam_move_up = 0
@@ -101,50 +94,23 @@ def load_shaders(vertex_shader_source, fragment_shader_source):
 
 
 def key_callback(window, key, scancode, action, mods):
+    global g_key_shift_toggle, g_cam_move_right, g_cam_move_up
     if key==GLFW_KEY_ESCAPE and action==GLFW_PRESS:
         glfwSetWindowShouldClose(window, GLFW_TRUE)
-    #for debug
-    else:
+    else: # TODO : delete the camera move
         if action==GLFW_PRESS or action==GLFW_REPEAT:
-            global debug_var
-            global  g_cam_azimuth, g_cam_elevation # for orbit
-            global g_tx,g_ty,g_tz
             if key==GLFW_KEY_1:
-                debug_var = 1
-            elif key==GLFW_KEY_2:
-                debug_var = 2
+                g_cam_move_right += .1
             elif key==GLFW_KEY_3:
-                debug_var = 3
-            elif key==GLFW_KEY_4:
-                debug_var = 4
-            elif key==GLFW_KEY_5:
-                debug_var = 5
-            elif key==GLFW_KEY_A:
-                g_cam_azimuth += .1
-            elif key==GLFW_KEY_Z:
-                g_cam_azimuth -= .1
-            elif key==GLFW_KEY_S:
-                g_cam_elevation += .1
-            elif key==GLFW_KEY_X:
-                g_cam_elevation -= .1
-
-            elif key==GLFW_KEY_LEFT:
-                g_tx += .1
-            elif key==GLFW_KEY_RIGHT:
-                g_tx -= .1
-            elif key==GLFW_KEY_UP:
-                g_tz += .1
-            elif key==GLFW_KEY_DOWN:
-                g_tz -= .1
-
-            print("mode: ",debug_var)
+                g_cam_move_right += -.1
+            elif key==GLFW_KEY_2:
+                g_cam_move_up += .1
+            elif key==GLFW_KEY_W:
+                g_cam_move_up += -.1
 
 def cursor_callback(window, xpos, ypos):
-    global g_cursor_last_xpos, g_cursor_last_ypos # for cursor
-    global g_mouse_button_left_toggle, g_cam_azimuth, g_cam_elevation # for orbit
-    global g_mouse_button_right_toggle, g_cam_move_right, g_cam_move_up # for pan
-    
-    # orbit move
+    global g_mouse_button_left_toggle, g_cursor_last_xpos, g_cursor_last_ypos, g_cam_azimuth, g_cam_elevation
+    global g_mouse_button_right_toggle, g_cam_move_right, g_cam_move_up
     if g_mouse_button_left_toggle:
         
         # check the cursor move
@@ -161,19 +127,8 @@ def cursor_callback(window, xpos, ypos):
 
         # update cam_angle and cam_height
         g_cam_azimuth += xoffset * sensitivity
-        g_cam_elevation += yoffset * sensitivity * 0
-        
-        # g_cam_angle must be in (0 ~ 2*pi)
-        if g_cam_azimuth > 2 * np.pi:
-            g_cam_azimuth -= 2 * np.pi
-        elif g_cam_azimuth < 0:
-            g_cam_azimuth += 2 * np.pi
-        if g_cam_elevation > 2 * np.pi:
-            g_cam_elevation -= 2 * np.pi
-        elif g_cam_elevation < 0:
-            g_cam_elevation += 2 * np.pi
+        g_cam_elevation += yoffset * sensitivity
             
-    # pan move
     elif g_mouse_button_right_toggle:
         
         # check the cursor move
@@ -209,12 +164,7 @@ def button_callback(window, button, action, mod):
             g_mouse_button_right_toggle = False
      
 def scroll_callback(window, xoffset, yoffset):
-    global g_cam_zoom
     print('mouse wheel scroll: %d, %d'%(xoffset, yoffset))
-    # set sensitivity
-    sensitivity = 0.05
-    g_cam_zoom += yoffset * sensitivity
-    
 
 def prepare_vao_triangle():
     # prepare vertex data (in main memory)
@@ -309,115 +259,11 @@ def prepare_vao_frame():
 
     return VAO
 
-def prepare_vao_box():
-    # prepare vertex data (in main memory)
-    vs=[[], # for index to start from 1
-        [0.2, 0, 0.2         ,1,0,0],
-        [-0.2, 0, 0.2        ,1,0,0],
-        [-0.2, 0, -0.2       ,1,0,0],
-        [0.2, 0, -0.2        ,1,0,0],
-        [0.2, 0.4, 0.2       ,1,0,0],
-        [-0.2, 0.4, 0.2      ,1,0,0],
-        [-0.2, 0.4, -0.2     ,1,0,0],
-        [0.2, 0.4, -0.2      ,1,0,0],
-    ]
-    vertices = glm.array(np.concatenate([
-        vs[3],
-        vs[4],
-        vs[2],
-        vs[1],
-        vs[5],
-        vs[2],
-        vs[6],
-        vs[3],
-        vs[7],
-        vs[4],
-        vs[8],
-        vs[1],
-        vs[5],
-        vs[8],
-        vs[6],
-        vs[7]
-    ],dtype=np.float32))
-
-    # create and activate VAO (vertex array object)
-    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
-    glBindVertexArray(VAO)      # activate VAO
-
-    # create and activate VBO (vertex buffer object)
-    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
-    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
-
-    # copy vertex data to VBO
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
-
-    # configure vertex positions
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
-    glEnableVertexAttribArray(0)
-
-    # configure vertex colors
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
-    glEnableVertexAttribArray(1)
-
-    return VAO
-
-def prepare_vao_minibox():
-    # prepare vertex data (in main memory)
-    vs=[[], # for index to start from 1
-        [0.01, 0, 0.01         ,1,0,1],
-        [-0.01, 0, 0.01        ,1,0,1],
-        [-0.01, 0, -0.01       ,1,0,1],
-        [0.01, 0, -0.01        ,1,0,1],
-        [0.01, 0.02, 0.01       ,1,0,1],
-        [-0.01, 0.02, 0.01      ,1,0,1],
-        [-0.01, 0.02, -0.01     ,1,0,1],
-        [0.01, 0.02, -0.01      ,1,0,1],
-    ]
-    vertices = glm.array(np.concatenate([
-        vs[3],
-        vs[4],
-        vs[2],
-        vs[1],
-        vs[5],
-        vs[2],
-        vs[6],
-        vs[3],
-        vs[7],
-        vs[4],
-        vs[8],
-        vs[1],
-        vs[5],
-        vs[8],
-        vs[6],
-        vs[7]
-    ],dtype=np.float32))
-
-    # create and activate VAO (vertex array object)
-    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
-    glBindVertexArray(VAO)      # activate VAO
-
-    # create and activate VBO (vertex buffer object)
-    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
-    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
-
-    # copy vertex data to VBO
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
-
-    # configure vertex positions
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
-    glEnableVertexAttribArray(0)
-
-    # configure vertex colors
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
-    glEnableVertexAttribArray(1)
-
-    return VAO
-
 def prepare_vao_grid():
     # prepare vertex data (in main memory)
     
     r,g,b = .5, .5, .5
-    half_size, start, end, line_num =2, -2, 2, 21
+    half_size, start, end, line_num =2, -2, 2, 22
     vertices_for_line_x = glm.array(np.concatenate([
         [
         -half_size, .0, np.round_(z,1), r, g, b,
@@ -491,8 +337,6 @@ def main():
     vao_triangle_blue = prepare_vao_triangle_blue()
     vao_frame = prepare_vao_frame()
     vao_grid = prepare_vao_grid()
-    vao_box = prepare_vao_box()
-    vao_minibox = prepare_vao_minibox()
 
     # loop until the user closes the window
     while not glfwWindowShouldClose(window):
@@ -510,43 +354,27 @@ def main():
 
         #TODO  180도 돌렸을 때 좌우방향 반대로 되는거 고쳐야함.
         # view matrix
-        d=0.1
-        t_x, t_y, t_z = g_tx,g_ty,g_tz
-        cam_target = glm.vec3( t_x, t_y, t_z)
+        d=0.5
         cam_pos = d * glm.vec3(
             ( np.cos(g_cam_elevation) ) * np.sin(g_cam_azimuth),
             np.sin(g_cam_elevation),
             ( np.cos(g_cam_elevation) ) * np.cos(g_cam_azimuth)
             ) # cam_orbit
-        up = glm.vec3(.0, .1, .0) if np.rad2deg(g_cam_elevation) < 90 or np.rad2deg(g_cam_elevation) > 270 else glm.vec3(.0, -1, .0)
-        
-        #
+        cam_target = glm.vec3(.0,.0,.0)
         cam_direction = glm.normalize(cam_pos - cam_target) # actually opposite direction
+        up = glm.vec3(.0, .1, .0) if np.rad2deg(g_cam_elevation) < 90 or np.rad2deg(g_cam_elevation) > 270 else glm.vec3(.0, -1, .0)
         cam_right = glm.normalize(glm.cross(up,cam_direction))
+        # if np.rad2deg(g_cam_elevation) > 90 and np.rad2deg(g_cam_elevation) < 270:
+        #     print("before: ",cam_right)
+        #     cam_right = cam_right * glm.vec3(-1,-1,-1) #TODO
+        #     print("after: ",cam_right)
         cam_up = glm.normalize(glm.cross(cam_direction,cam_right))
+        
         cam_pan = (cam_right*g_cam_move_right + cam_up*g_cam_move_up)
         
-        #cam_target += cam_pan
-        #cam_pos += cam_pane
-        #cam_pos = cam_pos - cam_target
-        cam_zoom = -cam_direction * g_cam_zoom
-        
         # glm.lookAt(eye, center, up)
-        V = glm.lookAt(cam_pos+cam_target, cam_target, up)
-        
-        # if debug_var==1:
-        #     V = glm.lookAt(cam_pos, cam_target, up)
-        # elif debug_var==2:
-        #     V = glm.lookAt(cam_pos+cam_pan, cam_target+cam_pan, up)
-        # elif debug_var==3:
-        #     T_forV = glm.translate(cam_right*g_cam_move_right)
-        #     V = T_forV*glm.lookAt(cam_pos, cam_pan, up)
-        # elif debug_var==4:
-        #     V = glm.lookAt(cam_pos+cam_pan, cam_target, up)
-                
-        # t1 = glfwGetTime()
-        # V = glm.translate(-cam_pan) * V
-        
+        V = glm.lookAt(cam_pos+cam_pan, cam_target+cam_pan, up)
+
         #######
         # current frame: P*V*I (now this is the world frame)
         I = glm.mat4()
@@ -559,21 +387,7 @@ def main():
         
         # draw current grid
         glBindVertexArray(vao_grid)
-        glDrawArrays(GL_LINES, 0, 84)
-        
-        # draw current box
-        glBindVertexArray(vao_box)
-        #glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
-        glDrawArrays(GL_LINE_STRIP, 0, 16)
-        
-        ###### mini box
-        M=glm.translate(glm.vec3(t_x,t_y,t_z))
-        #M=glm.translate(cam_pan)
-        MVP = P*V*M
-        glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
-        # draw current minibox
-        glBindVertexArray(vao_minibox)
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
+        glDrawArrays(GL_LINES, 0, 88)
 
         #######
         # animating
