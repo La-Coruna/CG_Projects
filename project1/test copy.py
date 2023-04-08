@@ -9,7 +9,6 @@ debug_var=1
 g_tx=0
 g_ty=0
 g_tz=0
-printer = None
 
 g_mouse_button_left_toggle = False
 g_mouse_button_right_toggle = False
@@ -22,11 +21,6 @@ g_cam_zoom = .0
 
 g_cam_move_right = 0
 g_cam_move_up = 0
-
-g_cam_pan = glm.vec3(.0,.0,.0)
-g_cam_direction = glm.vec3(.0,.0,.0)
-g_cam_right = glm.vec3(.0,.0,.0)
-g_cam_up = glm.vec3(.0,.0,.0)
 
 g_vertex_shader_src = '''
 #version 330 core
@@ -114,7 +108,7 @@ def key_callback(window, key, scancode, action, mods):
         if action==GLFW_PRESS or action==GLFW_REPEAT:
             global debug_var
             global  g_cam_azimuth, g_cam_elevation # for orbit
-            global g_tx,g_ty,g_tz, printer, g_cam_move_right, g_cam_move_up
+            global g_tx,g_ty,g_tz
             if key==GLFW_KEY_1:
                 debug_var = 1
             elif key==GLFW_KEY_2:
@@ -146,19 +140,13 @@ def key_callback(window, key, scancode, action, mods):
                 g_ty += .1
             elif key==GLFW_KEY_C:
                 g_ty -= .1
-            elif key==GLFW_KEY_SPACE:
-                print(printer)
-            elif key==GLFW_KEY_O:
-                g_cam_move_right += .1
-            elif key==GLFW_KEY_P:
-                g_cam_move_right -= .1
 
-            #print("mode: ",debug_var)
+            print("mode: ",debug_var)
 
 def cursor_callback(window, xpos, ypos):
     global g_cursor_last_xpos, g_cursor_last_ypos # for cursor
     global g_mouse_button_left_toggle, g_cam_azimuth, g_cam_elevation # for orbit
-    global g_mouse_button_right_toggle, g_cam_move_right, g_cam_move_up, g_cam_pan # for pan
+    global g_mouse_button_right_toggle, g_cam_move_right, g_cam_move_up # for pan
     
     # orbit move
     if g_mouse_button_left_toggle:
@@ -203,8 +191,6 @@ def cursor_callback(window, xpos, ypos):
         # update move
         g_cam_move_right += xoffset * sensitivity
         g_cam_move_up += yoffset * sensitivity
-        g_cam_pan = (g_cam_right * g_cam_move_right + g_cam_up* g_cam_move_up)
-        print("g_cam_move_right: ",g_cam_move_right, "g_cam_move_up: ", g_cam_move_up)
         
         
         
@@ -528,37 +514,29 @@ def main():
 
         #TODO  180도 돌렸을 때 좌우방향 반대로 되는거 고쳐야함.
         # view matrix
-        global g_cam_pan
-        global g_cam_direction,g_cam_right,g_cam_up
         d=0.1
         t_x, t_y, t_z = g_tx,g_ty,g_tz
-        cam_target = glm.vec3( 0,0,0) +g_cam_pan
-        cam_orbit = d * glm.vec3(
+        cam_bad_pan = glm.vec3( t_x, t_y, t_z)
+        cam_target = glm.vec3( 0,0,0) + cam_bad_pan
+        cam_pos = d * glm.vec3(
             ( np.cos(g_cam_elevation) ) * np.sin(g_cam_azimuth),
             np.sin(g_cam_elevation),
             ( np.cos(g_cam_elevation) ) * np.cos(g_cam_azimuth)
-            ) # cam_orbit
-        cam_pos = cam_orbit + g_cam_pan
+            ) + cam_bad_pan 
         up = glm.vec3(.0, .1, .0) if np.rad2deg(g_cam_elevation) < 90 or np.rad2deg(g_cam_elevation) > 270 else glm.vec3(.0, -1, .0)
         
-        ## good pan
-        g_cam_direction = glm.normalize(cam_pos-cam_target) # actually opposite direction
-        g_cam_right = glm.normalize(glm.cross(up,g_cam_direction))
-        g_cam_up = glm.normalize(glm.cross(g_cam_direction,g_cam_right))
+        #
+        cam_direction = glm.normalize(cam_pos) # actually opposite direction
+        cam_right = glm.normalize(glm.cross(up,cam_direction))
+        cam_up = glm.normalize(glm.cross(cam_direction,cam_right))
+        cam_pan = (cam_right*g_cam_move_right + cam_up*g_cam_move_up)
         
-        ## bad pan
-        cam_pan_abs = glm.vec3( t_x, t_y, t_z)
-        
-        # cam_pos = cam_orbit+g_cam_pan
-        # cam_target += g_cam_pan
-        
-        global printer
-        printer=(1,cam_target,cam_pan_abs)
+        print(cam_pan)
         
         #cam_target += cam_pan
         #cam_pos += cam_pane
         #cam_pos = cam_pos - cam_target
-        #cam_zoom = -cam_direction * g_cam_zoom
+        cam_zoom = -cam_direction * g_cam_zoom
         
         # glm.lookAt(eye, center, up)
         V = glm.lookAt(cam_pos, cam_target, up)
@@ -596,7 +574,7 @@ def main():
         glDrawArrays(GL_LINE_STRIP, 0, 16)
         
         ###### mini box
-        M=glm.translate(g_cam_pan)
+        M=glm.translate(glm.vec3(t_x,t_y,t_z))
         #M=glm.translate(cam_pan)
         MVP = P*V*M
         glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))

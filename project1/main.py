@@ -22,6 +22,11 @@ g_cam_zoom = .0
 g_cam_move_right = 0
 g_cam_move_up = 0
 
+g_cam_pos = glm.vec3(.0,.0,.0)
+g_cam_target = glm.vec3(.0,.0,.0)
+g_cam_orbit = glm.vec3(.0,.0,.0)
+g_cam_pan = glm.vec3(.0,.0,.0)
+
 g_vertex_shader_src = '''
 #version 330 core
 
@@ -129,13 +134,17 @@ def key_callback(window, key, scancode, action, mods):
                 g_cam_elevation -= .1
 
             elif key==GLFW_KEY_LEFT:
-                g_tx += .1
-            elif key==GLFW_KEY_RIGHT:
                 g_tx -= .1
+            elif key==GLFW_KEY_RIGHT:
+                g_tx += .1
             elif key==GLFW_KEY_UP:
                 g_tz += .1
             elif key==GLFW_KEY_DOWN:
                 g_tz -= .1
+            elif key==GLFW_KEY_D:
+                g_ty += .1
+            elif key==GLFW_KEY_C:
+                g_ty -= .1
 
             print("mode: ",debug_var)
 
@@ -161,7 +170,7 @@ def cursor_callback(window, xpos, ypos):
 
         # update cam_angle and cam_height
         g_cam_azimuth += xoffset * sensitivity
-        g_cam_elevation += yoffset * sensitivity * 0
+        g_cam_elevation += yoffset * sensitivity
         
         # g_cam_angle must be in (0 ~ 2*pi)
         if g_cam_azimuth > 2 * np.pi:
@@ -512,32 +521,41 @@ def main():
         # view matrix
         d=0.1
         t_x, t_y, t_z = g_tx,g_ty,g_tz
-        cam_target = glm.vec3( t_x, t_y, t_z)
-        cam_pos = d * glm.vec3(
+        
+        # cam_orbit
+        g_cam_orbit = d * glm.vec3(
             ( np.cos(g_cam_elevation) ) * np.sin(g_cam_azimuth),
             np.sin(g_cam_elevation),
             ( np.cos(g_cam_elevation) ) * np.cos(g_cam_azimuth)
-            ) # cam_orbit
-        up = glm.vec3(.0, .1, .0) if np.rad2deg(g_cam_elevation) < 90 or np.rad2deg(g_cam_elevation) > 270 else glm.vec3(.0, -1, .0)
+            )
         
-        #
-        cam_direction = glm.normalize(cam_pos - cam_target) # actually opposite direction
+        # determine vectors of cam
+        up = glm.vec3(.0, .1, .0) if np.rad2deg(g_cam_elevation) < 90 or np.rad2deg(g_cam_elevation) > 270 else glm.vec3(.0, -1, .0)
+        cam_direction = glm.normalize(g_cam_pos - g_cam_target) # actually opposite direction
         cam_right = glm.normalize(glm.cross(up,cam_direction))
         cam_up = glm.normalize(glm.cross(cam_direction,cam_right))
-        cam_pan = (cam_right*g_cam_move_right + cam_up*g_cam_move_up)
         
-        #cam_target += cam_pan
-        #cam_pos += cam_pane
-        #cam_pos = cam_pos - cam_target
+        # cam_pan
+        cam_pan = (cam_right*g_cam_move_right + cam_up*g_cam_move_up)
+        t_x, t_y, t_z = cam_pan.x, cam_pan.y, cam_pan.z
+        # cam_pos += cam_pan
+        # cam_target += cam_pan
+        
+        
+        # determine vectors of cam
+        cam_direction = glm.normalize(cam_orbit - g_cam_target) # actually opposite direction
+        cam_right = glm.normalize(glm.cross(up,cam_direction))
+        cam_up = glm.normalize(glm.cross(cam_direction,cam_right))
+        
+        #cam_zoom
         cam_zoom = -cam_direction * g_cam_zoom
         
         # glm.lookAt(eye, center, up)
-        V = glm.lookAt(cam_pos+cam_target, cam_target, up)
         
-        # if debug_var==1:
-        #     V = glm.lookAt(cam_pos, cam_target, up)
-        # elif debug_var==2:
-        #     V = glm.lookAt(cam_pos+cam_pan, cam_target+cam_pan, up)
+        if debug_var==1:
+            V = glm.lookAt(g_cam_pos, g_cam_target, up)
+        elif debug_var==2:
+            V = glm.lookAt(g_cam_pos+cam_pan, g_cam_target+cam_pan, up)
         # elif debug_var==3:
         #     T_forV = glm.translate(cam_right*g_cam_move_right)
         #     V = T_forV*glm.lookAt(cam_pos, cam_pan, up)
