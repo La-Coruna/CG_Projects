@@ -8,25 +8,23 @@ import numpy as np
 debug_var=1
 printer = None
 
-# for mouse control
 g_mouse_button_left_toggle = False
 g_mouse_button_right_toggle = False
 g_cursor_last_xpos = 0
 g_cursor_last_ypos = 0
 
-# for orbit
-g_cam_azimuth = 0. # z축으로 부터의 각임.
+g_cam_azimuth = 0. # azimuth. z축으로 부터의 각임.
 g_cam_elevation = .1
 g_cam_orbit_direction_toggle = False # blender의 viewr와 같이, 처음 클릭했을 때의 elevation을 기준으로 azimuth의 회전 방향을 결정.
-
-# for pan
-g_cam_pan = glm.vec3(.0,.0,.0)          # pan move ( cam pos = orbit + pan )
-g_cam_direction = glm.vec3(.0,.0,.0)    # w vector of camera
-g_cam_right = glm.vec3(.0,.0,.0)        # u vector of camera
-g_cam_up = glm.vec3(.0,.0,.0)           # v vector of camera
-
-# for zoom
 g_cam_zoom = .0
+
+g_cam_move_right = 0
+g_cam_move_up = 0
+
+g_cam_pan = glm.vec3(.0,.0,.0)
+g_cam_direction = glm.vec3(.0,.0,.0)
+g_cam_right = glm.vec3(.0,.0,.0)
+g_cam_up = glm.vec3(.0,.0,.0)
 
 g_vertex_shader_src = '''
 #version 330 core
@@ -112,8 +110,9 @@ def key_callback(window, key, scancode, action, mods):
     #for debug
     else:
         if action==GLFW_PRESS or action==GLFW_REPEAT:
-            global debug_var, printer
+            global debug_var
             global  g_cam_azimuth, g_cam_elevation # for orbit
+            global printer, g_cam_move_right, g_cam_move_up
             if key==GLFW_KEY_1:
                 debug_var = 1
             elif key==GLFW_KEY_2:
@@ -133,17 +132,27 @@ def key_callback(window, key, scancode, action, mods):
             elif key==GLFW_KEY_X:
                 g_cam_elevation -= .1
 
-
+            elif key==GLFW_KEY_LEFT:
+                g_cam_move_right -= .1
+            elif key==GLFW_KEY_RIGHT:
+                g_cam_move_right += .1
+            elif key==GLFW_KEY_UP:
+                g_cam_move_up += .1
+            elif key==GLFW_KEY_DOWN:
+                g_cam_move_up -= .1
             elif key==GLFW_KEY_SPACE:
                 print(printer)
             elif key==GLFW_KEY_C:
                 print(g_cursor_last_xpos,g_cursor_last_ypos)
+            elif key==GLFW_KEY_P:
+                g_cam_move_right -= .1
 
+            #print("mode: ",debug_var)
 
 def cursor_callback(window, xpos, ypos):
     global g_cursor_last_xpos, g_cursor_last_ypos # for cursor
     global g_mouse_button_left_toggle, g_cam_azimuth, g_cam_elevation # for orbit
-    global g_mouse_button_right_toggle, g_cam_pan # for pan
+    global g_mouse_button_right_toggle, g_cam_move_right, g_cam_move_up, g_cam_pan # for pan
     
     # orbit move
     if g_mouse_button_left_toggle:
@@ -200,7 +209,7 @@ def cursor_callback(window, xpos, ypos):
 
 def button_callback(window, button, action, mod):
     global g_mouse_button_left_toggle, g_mouse_button_right_toggle, g_cursor_last_xpos, g_cursor_last_ypos
-    global g_cam_orbit_direction_toggle
+    global g_cam_pan, g_cam_orbit_direction_toggle
     if button==GLFW_MOUSE_BUTTON_LEFT:
         if action==GLFW_PRESS:
             g_cursor_last_xpos, g_cursor_last_ypos = glfwGetCursorPos(window)
@@ -519,6 +528,7 @@ def main():
 
         #TODO  180도 돌렸을 때 좌우방향 반대로 되는거 고쳐야함.
         # view matrix
+        global g_cam_pan
         global g_cam_direction,g_cam_right,g_cam_up
         d=0.1
         cam_target = glm.vec3( 0,0,0) +g_cam_pan
