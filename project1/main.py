@@ -31,14 +31,14 @@ g_cam_right = glm.vec3(.0,.0,.0)        # u vector of camera
 g_cam_up = glm.vec3(.0,.0,.0)           # v vector of camera
 
 # for zoom
-g_cam_distance = 3.6 # the distance between camera and target ## d가 0.2보다 작아지면 깨짐. (d=3.6 , fovy = 45)일 때 ortho 와 배율이 비슷.
-g_cam_zoom = .0
+g_cam_distance = 3.6 # the distance between camera and target ## d가 0.2보다 작아지면 깨짐. (d=3.6 , fovy = 45)일 때 ortho 와 배율이 비슷. 작을 수록 확대 됨.
+g_ortho_mag = .15 # the magnification of lens in ortho ## 작을 수록 확대 됨.
 
 # for projection
 g_view_height = 10.
 g_view_width = g_view_height * 800/800
-#g_P = glm.perspective(90, g_view_width/g_view_height , -100, 10) 
-g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 1, 10) ## fovy should be in ( 0 ~ pi )
+
+g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 0.1, 100) ## fovy should be in ( 0 ~ pi )
 g_P_toggle = True
 
 g_vertex_shader_src = '''
@@ -121,9 +121,11 @@ def load_shaders(vertex_shader_source, fragment_shader_source):
 def update_projection_matrix():
     global g_P
     if g_P_toggle:
-        g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 1, 10)
+        # perspective projection
+        g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 0.1, 100)
     else:
-        d = 0.1 # the magnification of lens, 작을 수록 화면이 확대됨.
+        # orthogonal projection
+        d = g_ortho_mag # the magnification of lens, 작을 수록 화면이 확대됨.
         g_P = glm.ortho(-g_view_width*d, g_view_width*d, -g_view_height*d, g_view_height*d, -10, 10)
 
 def framebuffer_size_callback(window, width, height):
@@ -184,9 +186,9 @@ def key_callback(window, key, scancode, action, mods):
             elif key==GLFW_KEY_SPACE:
                 print(printer)
             elif key==GLFW_KEY_UP:
-                g_cam_pan += glm.vec3(.0,.1,.0)
+                g_cam_pan += -g_cam_direction
             elif key==GLFW_KEY_DOWN:
-                g_cam_pan -= glm.vec3(.0,.1,.0)
+                g_cam_pan += g_cam_direction
                 
             elif key==GLFW_KEY_C:
                 print(g_cursor_last_xpos,g_cursor_last_ypos)
@@ -271,11 +273,17 @@ def button_callback(window, button, action, mod):
             g_mouse_button_right_toggle = False
      
 def scroll_callback(window, xoffset, yoffset):
-    global g_cam_zoom
-    print('mouse wheel scroll: %d, %d'%(xoffset, yoffset))
+    global g_cam_distance, g_ortho_mag
+
     # set sensitivity
     sensitivity = 0.05
-    g_cam_zoom += yoffset * sensitivity
+    
+    new_cam_distance = g_cam_distance - yoffset * sensitivity
+    if new_cam_distance >= 0.2:
+        g_cam_distance = new_cam_distance
+        g_ortho_mag = g_cam_distance * 0.0417
+        if not g_P_toggle:
+            update_projection_matrix()
     
 
 def prepare_vao_triangle():
@@ -541,6 +549,7 @@ def main():
     glfwSetCursorPosCallback(window, cursor_callback)
     glfwSetMouseButtonCallback(window, button_callback)
     glfwSetScrollCallback(window, scroll_callback)
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback)
 
     # load shaders
     shader_program = load_shaders(g_vertex_shader_src, g_fragment_shader_src)
