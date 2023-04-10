@@ -5,7 +5,10 @@ import ctypes
 import numpy as np
 
 #for debug
-debug_var=1
+debug_var=45
+da=1.5
+db=.1
+dc=3.5
 printer = None
 
 # for mouse control
@@ -21,12 +24,22 @@ g_cam_orbit_direction_toggle = False # blender의 viewr와 같이, 처음 클릭
 
 # for pan
 g_cam_pan = glm.vec3(.0,.0,.0)          # pan move ( cam pos = orbit + pan )
+
+# camera's vector
 g_cam_direction = glm.vec3(.0,.0,.0)    # w vector of camera
 g_cam_right = glm.vec3(.0,.0,.0)        # u vector of camera
 g_cam_up = glm.vec3(.0,.0,.0)           # v vector of camera
 
 # for zoom
+g_cam_distance = 3.6 # the distance between camera and target ## d가 0.2보다 작아지면 깨짐. (d=3.6 , fovy = 45)일 때 ortho 와 배율이 비슷.
 g_cam_zoom = .0
+
+# for projection
+g_view_height = 10.
+g_view_width = g_view_height * 800/800
+#g_P = glm.perspective(90, g_view_width/g_view_height , -100, 10) 
+g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 1, 10) ## fovy should be in ( 0 ~ pi )
+g_P_toggle = True
 
 g_vertex_shader_src = '''
 #version 330 core
@@ -105,6 +118,22 @@ def load_shaders(vertex_shader_source, fragment_shader_source):
 
     return shader_program    # return the shader program
 
+def update_projection_matrix():
+    global g_P
+    if g_P_toggle:
+        g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 1, 10)
+    else:
+        d = 0.1 # the magnification of lens, 작을 수록 화면이 확대됨.
+        g_P = glm.ortho(-g_view_width*d, g_view_width*d, -g_view_height*d, g_view_height*d, -10, 10)
+
+def framebuffer_size_callback(window, width, height):
+    global g_view_width
+    
+    glViewport(0, 0, width, height)
+
+    #g_view_height = 10. # g_view_height은 항상 고정.
+    g_view_width = g_view_height * width/height
+    update_projection_matrix()
 
 def key_callback(window, key, scancode, action, mods):
     if key==GLFW_KEY_ESCAPE and action==GLFW_PRESS:
@@ -112,30 +141,53 @@ def key_callback(window, key, scancode, action, mods):
     #for debug
     else:
         if action==GLFW_PRESS or action==GLFW_REPEAT:
-            global debug_var, printer
+            global debug_var, printer, da, db, dc, g_cam_pan
             global  g_cam_azimuth, g_cam_elevation # for orbit
-            if key==GLFW_KEY_1:
-                debug_var = 1
+            if key==GLFW_KEY_V: #! not for debuging
+                global g_P_toggle
+                g_P_toggle = not g_P_toggle
+                update_projection_matrix()
+            elif key==GLFW_KEY_1:
+                da -= .1
+                print(da)
+                update_projection_matrix()
             elif key==GLFW_KEY_2:
-                debug_var = 2
+                da += .1
+                print(da)
+                update_projection_matrix()
             elif key==GLFW_KEY_3:
-                debug_var = 3
+                debug_var -= 1
+                print(debug_var)
+                update_projection_matrix()
             elif key==GLFW_KEY_4:
-                debug_var = 4
+                debug_var += 1
+                print(debug_var)
+                update_projection_matrix()
             elif key==GLFW_KEY_5:
                 debug_var = 5
-            elif key==GLFW_KEY_A:
-                g_cam_azimuth += .1
-            elif key==GLFW_KEY_Z:
-                g_cam_azimuth -= .1
-            elif key==GLFW_KEY_S:
-                g_cam_elevation += .1
-            elif key==GLFW_KEY_X:
-                g_cam_elevation -= .1
-
-
+            elif key==GLFW_KEY_J:
+                db += .1
+                print(db)
+                update_projection_matrix()
+            elif key==GLFW_KEY_H:
+                db += -.1
+                print(db)
+                update_projection_matrix()
+            elif key==GLFW_KEY_L:
+                dc += .1
+                print(dc)
+                update_projection_matrix()
+            elif key==GLFW_KEY_K:
+                dc += -.1
+                print(dc)
+                update_projection_matrix()
             elif key==GLFW_KEY_SPACE:
                 print(printer)
+            elif key==GLFW_KEY_UP:
+                g_cam_pan += glm.vec3(.0,.1,.0)
+            elif key==GLFW_KEY_DOWN:
+                g_cam_pan -= glm.vec3(.0,.1,.0)
+                
             elif key==GLFW_KEY_C:
                 print(g_cursor_last_xpos,g_cursor_last_ypos)
 
@@ -157,7 +209,6 @@ def cursor_callback(window, xpos, ypos):
         sensitivity = 0.01
 
         # when ( 90 < elevation < 270 ), azimuth should change opposite direction
-        
         if g_cam_orbit_direction_toggle:
             xoffset *= -1
 
@@ -175,7 +226,7 @@ def cursor_callback(window, xpos, ypos):
         elif g_cam_elevation < 0:
             g_cam_elevation += 2 * np.pi
         
-        print("xpos: ",xpos, "ypos: ", ypos)
+        
             
     # pan move
     elif g_mouse_button_right_toggle:
@@ -185,7 +236,7 @@ def cursor_callback(window, xpos, ypos):
         yoffset = ypos - g_cursor_last_ypos
         g_cursor_last_xpos, g_cursor_last_ypos = xpos, ypos
         
-        print("xoffset: ",xoffset, "yoffset: ", yoffset)
+        
         # set sensitivity
         sensitivity = 0.001
         xoffset*=sensitivity
@@ -199,11 +250,13 @@ def cursor_callback(window, xpos, ypos):
         
 
 def button_callback(window, button, action, mod):
-    global g_mouse_button_left_toggle, g_mouse_button_right_toggle, g_cursor_last_xpos, g_cursor_last_ypos
+    global g_mouse_button_left_toggle, g_mouse_button_right_toggle
+    global g_cursor_last_xpos, g_cursor_last_ypos
     global g_cam_orbit_direction_toggle
     if button==GLFW_MOUSE_BUTTON_LEFT:
         if action==GLFW_PRESS:
             g_cursor_last_xpos, g_cursor_last_ypos = glfwGetCursorPos(window)
+            # if elevation is in ( 90 ~ 270 ) degree, it will be True.
             g_cam_orbit_direction_toggle = True if np.rad2deg(g_cam_elevation) > 90 and np.rad2deg(g_cam_elevation) < 270 else False
             g_mouse_button_left_toggle = True
         elif action==GLFW_RELEASE:
@@ -515,33 +568,35 @@ def main():
 
         # projection matrix
         # use orthogonal projection (we'll see details later)
-        P = glm.ortho(-1,1,-1,1,-1,1)
+        P = g_P
 
-        #TODO  180도 돌렸을 때 좌우방향 반대로 되는거 고쳐야함.
+        #TODO  Zoom 기능 구현
         # view matrix
-        global g_cam_direction,g_cam_right,g_cam_up
-        d=0.1
-        cam_target = glm.vec3( 0,0,0) +g_cam_pan
-        cam_orbit = d * glm.vec3(
-            ( np.cos(g_cam_elevation) ) * np.sin(g_cam_azimuth),
+        
+        cam_target = glm.vec3(0,0,0) + g_cam_pan
+        cam_orbit = g_cam_distance * glm.vec3(
+            np.cos(g_cam_elevation) * np.sin(g_cam_azimuth),
             np.sin(g_cam_elevation),
-            ( np.cos(g_cam_elevation) ) * np.cos(g_cam_azimuth)
+            np.cos(g_cam_elevation) * np.cos(g_cam_azimuth)
             ) # cam_orbit
         cam_pos = cam_orbit + g_cam_pan
         up = glm.vec3(.0, .1, .0) if np.rad2deg(g_cam_elevation) < 90 or np.rad2deg(g_cam_elevation) > 270 else glm.vec3(.0, -1, .0)
         
-        ## good pan
+        global g_cam_direction,g_cam_right,g_cam_up
         g_cam_direction = glm.normalize(cam_pos-cam_target) # actually opposite direction
         g_cam_right = glm.normalize(glm.cross(up,g_cam_direction))
         g_cam_up = glm.normalize(glm.cross(g_cam_direction,g_cam_right))
         
-        cam_zoom = -g_cam_direction * g_cam_zoom
+        #cam_zoom = -g_cam_direction * g_cam_zoom
         
-        # glm.lookAt(eye, center, up)
+        #! for debug
+        global printer
+        printer=("cam_pos: ",cam_pos,"cam_target: ",cam_target)
+        
         V = glm.lookAt(cam_pos, cam_target, up)
         
         
-        #######
+        ##
         # current frame: P*V*I (now this is the world frame)
         I = glm.mat4()
         MVP = P*V*I
@@ -557,19 +612,18 @@ def main():
         
         # draw current box
         glBindVertexArray(vao_box)
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
-        #glDrawArrays(GL_LINE_STRIP, 0, 16)
+        #glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
+        glDrawArrays(GL_LINE_STRIP, 0, 16)
         
-        ###### mini box
+        ###### mini box for focus
         M=glm.translate(g_cam_pan)
-        #M=glm.translate(cam_pan)
         MVP = P*V*M
         glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
         # draw current minibox
         glBindVertexArray(vao_minibox)
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
 
-        #######
+        ##
         # animating
         t = glfwGetTime()
 
@@ -601,7 +655,7 @@ def main():
         glBindVertexArray(vao_frame)
         glDrawArrays(GL_LINES, 0, 6)
 
-        ### draw triangle_blue
+        ## draw triangle_blue
         M = glm.translate(glm.vec3(np.sin(t), .2, -0.2))
         MVP = P*V*M
         glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
