@@ -44,7 +44,80 @@ g_obj_v = []
 g_obj_vn = []
 g_obj_f = []
 
-g_vertex_shader_src = '''
+g_vertex_shader_src_lighting = '''
+#version 330 core
+
+layout (location = 0) in vec3 vin_pos; 
+layout (location = 1) in vec3 vin_normal; 
+
+out vec3 vout_surface_pos;
+out vec3 vout_normal;
+
+uniform mat4 MVP;
+uniform mat4 M;
+
+void main()
+{
+    vec4 p3D_in_hcoord = vec4(vin_pos.xyz, 1.0);
+    gl_Position = MVP * p3D_in_hcoord;
+
+    vout_surface_pos = vec3(M * vec4(vin_pos, 1));
+    vout_normal = normalize( mat3(inverse(transpose(M)) ) * vin_normal);
+}
+'''
+
+g_fragment_shader_src_lighting = '''
+#version 330 core
+
+in vec3 vout_surface_pos;
+in vec3 vout_normal;
+
+out vec4 FragColor;
+
+uniform vec3 view_pos;
+uniform vec3 material_color;
+
+void main()
+{
+    // light and material properties
+    vec3 light_pos = vec3(3,2,4);
+    vec3 light_color = vec3(1,1,1);
+    float material_shininess = 32.0;
+
+    // light components
+    vec3 light_ambient = 0.1*light_color;
+    vec3 light_diffuse = light_color;
+    vec3 light_specular = light_color;
+
+    // material components
+    vec3 material_ambient = material_color;
+    vec3 material_diffuse = material_color;
+    vec3 material_specular = light_color;  // for non-metal material
+
+    // ambient
+    vec3 ambient = light_ambient * material_ambient;
+
+    // for diffiuse and specular
+    vec3 normal = normalize(vout_normal);
+    vec3 surface_pos = vout_surface_pos;
+    vec3 light_dir = normalize(light_pos - surface_pos);
+
+    // diffuse
+    float diff = max(dot(normal, light_dir), 0);
+    vec3 diffuse = diff * light_diffuse * material_diffuse;
+
+    // specular
+    vec3 view_dir = normalize(view_pos - surface_pos);
+    vec3 reflect_dir = reflect(-light_dir, normal);
+    float spec = pow( max(dot(view_dir, reflect_dir), 0.0), material_shininess);
+    vec3 specular = spec * light_specular * material_specular;
+
+    vec3 color = ambient + diffuse + specular;
+    FragColor = vec4(color, 1.);
+}
+'''
+
+g_vertex_shader_src_color = '''
 #version 330 core
 
 layout (location = 0) in vec3 vin_pos; 
@@ -65,7 +138,7 @@ void main()
 }
 '''
 
-g_fragment_shader_src = '''
+g_fragment_shader_src_color = '''
 #version 330 core
 
 in vec4 vout_color;
@@ -291,11 +364,6 @@ def drop_callback(window, paths):
     print("\nNumber of faces with 3 vertices:", len([x for x in g_obj_f if len(x)==3]))
     print("\nNumber of faces with 4 vertices:", len([x for x in g_obj_f if len(x)==4]))
     print("\nNumber of faces with more than 4 vertices:", len([x for x in g_obj_f if len(x)>4]))
-    
-
-    
-    
-    
 
 def prepare_vao_triangle():
     # prepare vertex data (in main memory)
@@ -513,6 +581,11 @@ def draw_frame(vao, MVP, unif_locs):
     glBindVertexArray(vao)
     glDrawArrays(GL_LINES, 0, 6)
 
+def draw_grid(vao, MVP, unif_locs):
+    glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+    glBindVertexArray(vao)
+    glDrawArrays(GL_LINES, 0, 84)
+
 def main():
     # initialize glfw
     if not glfwInit():
@@ -536,12 +609,19 @@ def main():
     glfwSetScrollCallback(window, scroll_callback)
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback)
     glfwSetDropCallback(window, drop_callback)
+  
+    # load shaders & get uniform locations
+    shader_lighting = load_shaders(g_vertex_shader_src_lighting, g_fragment_shader_src_lighting)
+    unif_names = ['MVP', 'M', 'view_pos', 'material_color']
+    unif_locs_lighting = {}
+    for name in unif_names:
+        unif_locs_lighting[name] = glGetUniformLocation(shader_lighting, name)
 
-    # load shaders
-    shader_program = load_shaders(g_vertex_shader_src, g_fragment_shader_src)
-
-    # get uniform locations
-    MVP_loc = glGetUniformLocation(shader_program, 'MVP')
+    shader_color = load_shaders(g_vertex_shader_src_color, g_fragment_shader_src_color)
+    unif_names = ['MVP']
+    unif_locs_color = {}
+    for name in unif_names:
+        unif_locs_color[name] = glGetUniformLocation(shader_color, name)
     
     # prepare vaos
     vao_triangle = prepare_vao_triangle()
@@ -557,12 +637,10 @@ def main():
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glEnable(GL_DEPTH_TEST)
 
-        glUseProgram(shader_program)
-
-        # projection matrix
+        ## projection matrix
         P = g_P
 
-        # view matrix        
+        ## view matrix        
         cam_target = glm.vec3(0,0,0) + g_cam_pan
         cam_orbit = g_cam_distance * glm.vec3(
             np.cos(g_cam_elevation) * np.sin(g_cam_azimuth),
@@ -580,40 +658,34 @@ def main():
         
         V = glm.lookAt(cam_pos, cam_target, up)
         
-        # drawing part
+        ## drawing part
+        glUseProgram(shader_color)
         
-        ## current frame: P*V*I (now this is the world frame)
-        I = glm.mat4()
-        MVP = P*V*I
-        glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
-
-        # draw current frame
-        glBindVertexArray(vao_frame)
-        glDrawArrays(GL_LINES, 0, 6)
+        #@ draw current frame
+        draw_frame(vao_frame, P*V, unif_locs_color)
         
-        # draw current grid
-        glBindVertexArray(vao_grid)
-        glDrawArrays(GL_LINES, 0, 84)
+        #@ draw current grid
+        draw_grid(vao_grid, P*V, unif_locs_color)
         
         # draw current box
-        glBindVertexArray(vao_box)
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
+        #glBindVertexArray(vao_box)
+        #glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
         
         ## animating
-        t = glfwGetTime()
+        # t = glfwGetTime()
 
-        # tranlation
-        T = glm.translate(glm.vec3(np.sin(t), .2, 0.4))
+        # # tranlation
+        # T = glm.translate(glm.vec3(np.sin(t), .2, 0.4))
 
-        M = T
+        # M = T
 
-        # current frame: P*V*M
-        MVP = P*V*M
-        glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
+        # # current frame: P*V*M
+        # MVP = P*V*M
+        # glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
 
-        # draw triangle w.r.t. the current frame
-        glBindVertexArray(vao_triangle)
-        glDrawArrays(GL_TRIANGLES, 0, 3)
+        # # draw triangle w.r.t. the current frame
+        # glBindVertexArray(vao_triangle)
+        # glDrawArrays(GL_TRIANGLES, 0, 3)
 
         # swap front and back buffers
         glfwSwapBuffers(window)
