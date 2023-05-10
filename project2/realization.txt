@@ -1,0 +1,33 @@
+vertex 설정해줄 때
+리스트 컴프리헨션으로 만들고
+
+import numpy as np
+
+list1 = [[1, 10], [2, 22], [3, 19], [4, 7]]
+list2 = np.concatenate(list1)
+print(list2)
+
+해주면 딱일듯.
+
+격자 만들 때는 라인 스페이스하면 훨씬 좋음!!!!
+np.linspace
+
+
+########  glm.array에서 np.array 이슈 ###########
+a = glm.array(glm.float32,
+    -1.0, .0, -1,  1.0, 1.0, 1.0,
+)
+b= glm.array(np.array([-1.0, .0, -1,  1.0, 1.0, 1.0,])) # c_double로 들어가서 안 같은 거임!!
+
+print(a==b) # 둘이 다름
+
+a = glm.array(glm.float32,
+    -1.0, .0, -1,  1.0, 1.0, 1.0,
+)
+b = glm.array(np.array([-1.0, .0, -1,  1.0, 1.0, 1.0,], dtype=np.float32)) # dtype으로 타입 설정!
+# glm.float32는 np.float32와 같다!
+# 결국 이는 c_float 타입으로 바뀐다.
+
+print(a == b) # 이제 둘이 같음
+###################
+normalize는 크기를 1로 만드는 거야.
