@@ -37,6 +37,12 @@ g_view_width = g_view_height * 800/800
 g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 0.1, 100) # fov가 30도 ~ 60도 일 때 인간의 시야와 비슷.
 g_P_toggle = True
 
+# for obj file
+g_obj_ptr = None
+g_obj_v = []
+g_obj_vn = []
+g_obj_f = []
+
 g_vertex_shader_src = '''
 #version 330 core
 
@@ -142,7 +148,6 @@ def key_callback(window, key, scancode, action, mods):
                 g_P_toggle = not g_P_toggle
                 update_projection_matrix()
 
-
 def cursor_callback(window, xpos, ypos):
     global g_cursor_last_xpos, g_cursor_last_ypos # for cursor
     global g_mouse_button_left_toggle, g_cam_azimuth, g_cam_elevation # for orbit
@@ -175,9 +180,7 @@ def cursor_callback(window, xpos, ypos):
         if g_cam_elevation > 2 * np.pi:
             g_cam_elevation -= 2 * np.pi
         elif g_cam_elevation < 0:
-            g_cam_elevation += 2 * np.pi
-        
-        
+            g_cam_elevation += 2 * np.pi       
             
     # pan move
     elif g_mouse_button_right_toggle:
@@ -196,7 +199,6 @@ def cursor_callback(window, xpos, ypos):
         # update move
         g_cam_pan += g_cam_right * xoffset + g_cam_up * yoffset
              
-
 def button_callback(window, button, action, mod):
     global g_mouse_button_left_toggle, g_mouse_button_right_toggle
     global g_cursor_last_xpos, g_cursor_last_ypos
@@ -233,6 +235,56 @@ def scroll_callback(window, xoffset, yoffset):
         # g_ortho_mag = g_cam_distance * 0.0417 
         # if not g_P_toggle:
         #     update_projection_matrix()
+
+def drop_callback(window, paths):
+    print(paths)
+    global g_obj_ptr, g_obj_v, g_obj_vn, g_obj_f
+    g_obj_ptr = open(paths[0], 'r')
+    
+    # v : vertex positions
+    # vn : vertex normals
+    # f : face information
+    # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
+    # ! all argument indices are 1 based indices !
+    
+    for line in g_obj_ptr:
+        fields = line.strip().split()
+        if fields[0] == 'v':
+            g_obj_v.append( [float(x) for x in fields[1:]] )
+        elif fields[0] == 'vn':
+            g_obj_vn.append( [float(x) for x in fields[1:]] )
+        elif fields[0] == 'f':
+            face = []
+            for vtx in fields[1:]:
+                fields_of_vtx = vtx.split('/')
+                
+                # ex) f vertex_position_index
+                if len(fields_of_vtx) == 1:
+                    v_idx = int(fields_of_vtx[0]) - 1
+                    texture_idx = None
+                    vn_idx = None
+                    
+                # ex) f vertex_position_index / texture_coordinates_index
+                elif len(fields_of_vtx) == 2:
+                    v_idx = int(fields_of_vtx[0]) - 1
+                    texture_idx = int(fields_of_vtx[1]) - 1 if fields_of_vtx[1] else None
+                    vn_idx = None
+                    
+                # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
+                elif len(fields_of_vtx) == 3:
+                    v_idx = int(fields_of_vtx[0]) - 1
+                    texture_idx = int(fields_of_vtx[1]) - 1 if fields_of_vtx[1] else None
+                    vn_idx = int(fields_of_vtx[2]) if fields_of_vtx[2] else None
+                    
+                face.append( (v_idx, texture_idx, vn_idx) )
+            g_obj_f.append( face )
+                
+    g_obj_ptr.close()
+    print("v: ", g_obj_v, "\nvn: ", g_obj_vn, "\nf: ", g_obj_f)
+    
+
+    
+    
     
 
 def prepare_vao_triangle():
@@ -394,6 +446,58 @@ def prepare_vao_grid():
 
     return VAO
 
+def prepare_vao_obj():
+    # prepare vertex data (in main memory)
+    vs=[[], # for index to start from 1
+        [0.2, 0, 0.2         ,1,1,0],
+        [-0.2, 0, 0.2        ,1,1,0],
+        [-0.2, 0, -0.2       ,1,1,0],
+        [0.2, 0, -0.2        ,1,1,0],
+        [0.2, 0.4, 0.2       ,0,1,1],
+        [-0.2, 0.4, 0.2      ,0,1,1],
+        [-0.2, 0.4, -0.2     ,0,1,1],
+        [0.2, 0.4, -0.2      ,0,1,1],
+    ]
+    vertices = glm.array(np.concatenate([
+        vs[3],
+        vs[4],
+        vs[2],
+        vs[1],
+        vs[5],
+        vs[2],
+        vs[6],
+        vs[3],
+        vs[7],
+        vs[4],
+        vs[8],
+        vs[1],
+        vs[5],
+        vs[8],
+        vs[6],
+        vs[7]
+    ],dtype=np.float32))
+
+    # create and activate VAO (vertex array object)
+    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
+    glBindVertexArray(VAO)      # activate VAO
+
+    # create and activate VBO (vertex buffer object)
+    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
+    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
+
+    # copy vertex data to VBO
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
+
+    # configure vertex positions
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
+    glEnableVertexAttribArray(0)
+
+    # configure vertex colors
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
+    glEnableVertexAttribArray(1)
+
+    return VAO
+
 
 def main():
     # initialize glfw
@@ -405,7 +509,7 @@ def main():
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE) # for macOS
 
     # create a window and OpenGL context
-    window = glfwCreateWindow(800, 800, 'project1 2019019043 박종윤', None, None)
+    window = glfwCreateWindow(800, 800, 'project2 2019019043 박종윤', None, None)
     if not window:
         glfwTerminate()
         return
@@ -417,6 +521,7 @@ def main():
     glfwSetMouseButtonCallback(window, button_callback)
     glfwSetScrollCallback(window, scroll_callback)
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback)
+    glfwSetDropCallback(window, drop_callback)
 
     # load shaders
     shader_program = load_shaders(g_vertex_shader_src, g_fragment_shader_src)
