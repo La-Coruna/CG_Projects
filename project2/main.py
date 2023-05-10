@@ -3,6 +3,7 @@ from glfw.GLFW import *
 import glm
 import ctypes
 import numpy as np
+import os
 
 
 
@@ -38,7 +39,7 @@ g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 0.1, 100) # f
 g_P_toggle = True
 
 # for obj file
-g_obj_ptr = None
+g_obj_file = None
 g_obj_v = []
 g_obj_vn = []
 g_obj_f = []
@@ -238,8 +239,11 @@ def scroll_callback(window, xoffset, yoffset):
 
 def drop_callback(window, paths):
     print(paths)
-    global g_obj_ptr, g_obj_v, g_obj_vn, g_obj_f
-    g_obj_ptr = open(paths[0], 'r')
+    global g_obj_file, g_obj_v, g_obj_vn, g_obj_f
+    g_obj_file = open(paths[0], 'r')
+    g_obj_v = []
+    g_obj_vn = []
+    g_obj_f = []
     
     # v : vertex positions
     # vn : vertex normals
@@ -247,7 +251,7 @@ def drop_callback(window, paths):
     # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
     # ! all argument indices are 1 based indices !
     
-    for line in g_obj_ptr:
+    for line in g_obj_file:
         fields = line.strip().split()
         if fields[0] == 'v':
             g_obj_v.append( [float(x) for x in fields[1:]] )
@@ -258,29 +262,35 @@ def drop_callback(window, paths):
             for vtx in fields[1:]:
                 fields_of_vtx = vtx.split('/')
                 
-                # ex) f vertex_position_index
+                # ex) vertex_position_index
                 if len(fields_of_vtx) == 1:
                     v_idx = int(fields_of_vtx[0]) - 1
                     texture_idx = None
                     vn_idx = None
                     
-                # ex) f vertex_position_index / texture_coordinates_index
+                # ex) vertex_position_index / texture_coordinates_index
                 elif len(fields_of_vtx) == 2:
                     v_idx = int(fields_of_vtx[0]) - 1
                     texture_idx = int(fields_of_vtx[1]) - 1 if fields_of_vtx[1] else None
                     vn_idx = None
                     
-                # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
+                # ex) vertex_position_index / texture_coordinates_index / vertex_normal_index
                 elif len(fields_of_vtx) == 3:
                     v_idx = int(fields_of_vtx[0]) - 1
                     texture_idx = int(fields_of_vtx[1]) - 1 if fields_of_vtx[1] else None
-                    vn_idx = int(fields_of_vtx[2]) if fields_of_vtx[2] else None
+                    vn_idx = int(fields_of_vtx[2]) - 1 if fields_of_vtx[2] else None
                     
                 face.append( (v_idx, texture_idx, vn_idx) )
             g_obj_f.append( face )
                 
-    g_obj_ptr.close()
-    print("v: ", g_obj_v, "\nvn: ", g_obj_vn, "\nf: ", g_obj_f)
+    g_obj_file.close()
+    
+    # print obj file, print out the following information of the obj file to stdout
+    print("Obj file name:", os.path.basename(paths[0]))
+    print("\nTotal number of faces:", len(g_obj_f))
+    print("\nNumber of faces with 3 vertices:", len([x for x in g_obj_f if len(x)==3]))
+    print("\nNumber of faces with 4 vertices:", len([x for x in g_obj_f if len(x)==4]))
+    print("\nNumber of faces with more than 4 vertices:", len([x for x in g_obj_f if len(x)>4]))
     
 
     
@@ -498,6 +508,10 @@ def prepare_vao_obj():
 
     return VAO
 
+def draw_frame(vao, MVP, unif_locs):
+    glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+    glBindVertexArray(vao)
+    glDrawArrays(GL_LINES, 0, 6)
 
 def main():
     # initialize glfw
