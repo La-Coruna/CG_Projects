@@ -38,11 +38,15 @@ g_view_width = g_view_height * 800/800
 g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 0.1, 100) # fov가 30도 ~ 60도 일 때 인간의 시야와 비슷.
 g_P_toggle = True
 
-# for obj file
+# for obj file to be loaded
 g_obj_file = None
 g_obj_v = []
 g_obj_vn = []
 g_obj_f = []
+
+# for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
+# basic 
+g_rendering_mode = 0
 
 g_vertex_shader_src_lighting = '''
 #version 330 core
@@ -312,7 +316,7 @@ def scroll_callback(window, xoffset, yoffset):
 
 def drop_callback(window, paths):
     print(paths)
-    global g_obj_file, g_obj_v, g_obj_vn, g_obj_f
+    global g_obj_file, g_obj_v, g_obj_vn, g_obj_f, g_rendering_mode
     g_obj_file = open(paths[0], 'r')
     g_obj_v = []
     g_obj_vn = []
@@ -364,6 +368,14 @@ def drop_callback(window, paths):
     print("\nNumber of faces with 3 vertices:", len([x for x in g_obj_f if len(x)==3]))
     print("\nNumber of faces with 4 vertices:", len([x for x in g_obj_f if len(x)==4]))
     print("\nNumber of faces with more than 4 vertices:", len([x for x in g_obj_f if len(x)>4]))
+    
+    # change mode to single mesh rendering mode
+    g_rendering_mode = 0
+    print(g_obj_v)
+    print(g_obj_vn)
+    print(g_obj_f)
+    
+    
 
 def prepare_vao_triangle():
     # prepare vertex data (in main memory)
@@ -526,34 +538,35 @@ def prepare_vao_grid():
 
 def prepare_vao_obj():
     # prepare vertex data (in main memory)
-    vs=[[], # for index to start from 1
-        [0.2, 0, 0.2         ,1,1,0],
-        [-0.2, 0, 0.2        ,1,1,0],
-        [-0.2, 0, -0.2       ,1,1,0],
-        [0.2, 0, -0.2        ,1,1,0],
-        [0.2, 0.4, 0.2       ,0,1,1],
-        [-0.2, 0.4, 0.2      ,0,1,1],
-        [-0.2, 0.4, -0.2     ,0,1,1],
-        [0.2, 0.4, -0.2      ,0,1,1],
-    ]
-    vertices = glm.array(np.concatenate([
-        vs[3],
-        vs[4],
-        vs[2],
-        vs[1],
-        vs[5],
-        vs[2],
-        vs[6],
-        vs[3],
-        vs[7],
-        vs[4],
-        vs[8],
-        vs[1],
-        vs[5],
-        vs[8],
-        vs[6],
-        vs[7]
-    ],dtype=np.float32))
+    # 8 vertices
+    vertices = glm.array(glm.float32,
+        # position      color
+        -1 ,  1 ,  1 ,  1, 1, 1, # v0
+         1 ,  1 ,  1 ,  1, 1, 1, # v1
+         1 , -1 ,  1 ,  1, 1, 1, # v2
+        -1 , -1 ,  1 ,  1, 1, 1, # v3
+        -1 ,  1 , -1 ,  1, 1, 1, # v4
+         1 ,  1 , -1 ,  1, 1, 1, # v5
+         1 , -1 , -1 ,  1, 1, 1, # v6
+        -1 , -1 , -1 ,  1, 1, 1, # v7
+    )
+
+    # prepare index data
+    # 12 triangles
+    indices = glm.array(glm.uint32,
+        0,2,1,
+        0,3,2,
+        4,5,6,
+        4,6,7,
+        0,1,5,
+        0,5,4,
+        3,6,2,
+        3,7,6,
+        1,2,6,
+        1,6,5,
+        0,7,3,
+        0,4,7,
+    )
 
     # create and activate VAO (vertex array object)
     VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
@@ -563,8 +576,15 @@ def prepare_vao_obj():
     VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
     glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
 
+    # create and activate EBO (element buffer object)
+    EBO = glGenBuffers(1)   # create a buffer object ID and store it to EBO variable
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO)  # activate EBO as an element buffer object
+
     # copy vertex data to VBO
     glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
+
+    # copy index data to EBO
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy index data to the currently bound element buffer
 
     # configure vertex positions
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
@@ -585,6 +605,20 @@ def draw_grid(vao, MVP, unif_locs):
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glBindVertexArray(vao)
     glDrawArrays(GL_LINES, 0, 84)
+
+def draw_cube(vao, MVP, M, matcolor, unif_locs):
+    glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+    glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
+    glUniform3f(unif_locs['material_color'], matcolor.r, matcolor.g, matcolor.b)
+    glBindVertexArray(vao)
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
+
+def draw_obj_file(vao, MVP, M, matcolor, unif_locs, vertex_count):
+    glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+    glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
+    glUniform3f(unif_locs['material_color'], matcolor.r, matcolor.g, matcolor.b)
+    glBindVertexArray(vao)
+    glDrawArrays(GL_TRIANGLES, 0, vertex_count)
 
 def main():
     # initialize glfw
@@ -658,7 +692,7 @@ def main():
         
         V = glm.lookAt(cam_pos, cam_target, up)
         
-        ## drawing part
+        ## drawing color
         glUseProgram(shader_color)
         
         #@ draw current frame
@@ -667,9 +701,14 @@ def main():
         #@ draw current grid
         draw_grid(vao_grid, P*V, unif_locs_color)
         
-        # draw current box
-        #glBindVertexArray(vao_box)
-        #glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
+        ## drawing lighting
+        glUseProgram(shader_lighting)
+        
+        #@ draw current box
+        draw_cube(vao_box, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
+        
+        #@ draw obj file
+        
         
         ## animating
         # t = glfwGetTime()

@@ -4,34 +4,55 @@ import glm
 import ctypes
 import numpy as np
 
-vs=[
-    [0.2, 0, 0.2         ,1,0,0],
-    [-0.2, 0, 0.2        ,1,0,0],
-    [-0.2, 0, -0.2       ,1,0,0],
-    [0.2, 0, -0.2        ,1,0,0],
-    [0.2, 0.2, 0.2       ,1,0,0],
-    [-0.2, 0.2, 0.2      ,1,0,0],
-    [-0.2, 0.2, -0.2     ,1,0,0],
-    [0.2, 0.2, -0.2      ,1,0,0],
-]
-vertices = glm.array(np.concatenate([
-    vs[0],vs[1],vs[2],vs[3],
-    vs[0],vs[1],vs[5],vs[4],
-    vs[0],vs[4],vs[7],vs[3],
-    vs[6],vs[7],vs[4],vs[5],
-    vs[6],vs[5],vs[1],vs[2],
-    vs[6],vs[2],vs[3],vs[7],
-],dtype=np.float32))
-print(vertices)
+g_obj_v = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]
+g_obj_vn = []
+g_obj_f = [[(0, None, None), (1, None, None), (2, None, None), (3, None, None)], [(4, None, None), (7, None, None), (6, None, None), (5, None, None)], [(0, None, None), (4, None, None), (5, None, None), (1, None, None)], [(1, None, None), (5, None, None), (6, None, None), (2, None, None)], [(2, None, None), (6, None, None), (7, None, None), (3, None, None)], [(4, None, None), (0, None, None), (3, None, None), (7, None, None)]]
 
 
-## good pan
-cam_direction = glm.normalize(cam_pos-cam_target) # actually opposite direction
-cam_right = glm.normalize(glm.cross(up,cam_direction))
-cam_up = glm.normalize(glm.cross(cam_direction,cam_right))
-cam_pan = (cam_right*g_cam_move_right + cam_up*g_cam_move_up)
+vertices = glm.array(glm.float32,
+        # position      color
+        -1 ,  1 ,  1 , 
+         1 ,  1 ,  1 , 
+         1 , -1 ,  1 ,  
+        -1 , -1 ,  1 ,  
+        -1 ,  1 , -1 , 
+         1 ,  1 , -1 , 
+         1 , -1 , -1 , 
+        -1 , -1 , -1 ,  
+)
 
-cam_pos += cam_pan
-cam_target += cam_pan
+    # prepare index data
+    # 12 triangles
+indices = glm.array(glm.uint32,
+    0,2,1,
+    0,3,2,
+    4,5,6,
+    4,6,7,
+    0,1,5,
+    0,5,4,
+    3,6,2,
+    3,7,6,
+    1,2,6,
+    1,6,5,
+    0,7,3,
+    0,4,7,
+)
 
-V = glm.lookAt(cam_pos, cam_target, up)
+v = [               [-1 ,  1 ,  1 ], 
+         [1 ,  1 ,  1 ], 
+         [1 , -1 ,  1 ],  
+        [-1 , -1 ,  1 ],  
+        [-1 ,  1 , -1 ], 
+         [1 ,  1 , -1 ], 
+         [1 , -1 , -1 ], 
+        [-1 , -1 , -1 ],  
+    ]
+
+vertices2 = glm.array(np.array(np.concatenate(v),glm.float32))
+indices = glm.array(np.array(v,glm.float32))
+
+#indices
+
+print(vertices==vertices2)
+
+
