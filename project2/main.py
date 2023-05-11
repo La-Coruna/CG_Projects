@@ -44,9 +44,16 @@ g_obj_v = []
 g_obj_vn = []
 g_obj_f = []
 
+g_obj_vertices=[]
+g_obj_vertices_with_normal=[]
+g_vao_obj = None
+
 # for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
 # basic 
-g_rendering_mode = 0
+g_rendering_mode = 1
+
+# ! for debug
+g_debug_1 = 0
 
 g_vertex_shader_src_lighting = '''
 #version 330 core
@@ -225,6 +232,15 @@ def key_callback(window, key, scancode, action, mods):
                 global g_P_toggle
                 g_P_toggle = not g_P_toggle
                 update_projection_matrix()
+                
+            global g_debug_1
+            if key==GLFW_KEY_1:
+                if g_debug_1>0:
+                    g_debug_1 -=1
+                print(g_debug_1)
+            if key==GLFW_KEY_2:
+                g_debug_1 +=1
+                print(g_debug_1)
 
 def cursor_callback(window, xpos, ypos):
     global g_cursor_last_xpos, g_cursor_last_ypos # for cursor
@@ -317,11 +333,16 @@ def scroll_callback(window, xoffset, yoffset):
 def drop_callback(window, paths):
     print(paths)
     global g_obj_file, g_obj_v, g_obj_vn, g_obj_f, g_rendering_mode
+    global g_obj_vertices, g_obj_vertices_with_normal, g_vao_obj
     g_obj_file = open(paths[0], 'r')
     g_obj_v = []
     g_obj_vn = []
     g_obj_f = []
     
+    g_obj_vertices=[]
+    g_obj_vertices_with_normal=[]
+    g_vao_obj = None
+        
     # v : vertex positions
     # vn : vertex normals
     # f : face information
@@ -329,8 +350,11 @@ def drop_callback(window, paths):
     # ! all argument indices are 1 based indices !
     
     for line in g_obj_file:
+        #print(line)
         fields = line.strip().split()
-        if fields[0] == 'v':
+        if len(fields) == 0: # 빈 줄인 경우.
+            continue
+        elif fields[0] == 'v':
             g_obj_v.append( [float(x) for x in fields[1:]] )
         elif fields[0] == 'vn':
             g_obj_vn.append( [float(x) for x in fields[1:]] )
@@ -357,7 +381,7 @@ def drop_callback(window, paths):
                     texture_idx = int(fields_of_vtx[1]) - 1 if fields_of_vtx[1] else None
                     vn_idx = int(fields_of_vtx[2]) - 1 if fields_of_vtx[2] else None
                     
-                face.append( (v_idx, texture_idx, vn_idx) )
+                face.append( [v_idx, texture_idx, vn_idx] )
             g_obj_f.append( face )
                 
     g_obj_file.close()
@@ -371,9 +395,53 @@ def drop_callback(window, paths):
     
     # change mode to single mesh rendering mode
     g_rendering_mode = 0
-    print(g_obj_v)
-    print(g_obj_vn)
-    print(g_obj_f)
+    # print(g_obj_v)
+    # print(g_obj_vn)
+    # print(g_obj_f)
+    # print("----")
+    
+    # #1. vertices array
+    
+    for face in g_obj_f:
+        #print(face)
+        indexed_vertex_infos_list = []
+        if len(face) > 3:
+            #print("polygon이 triangle이 아닐 경우")
+            for i in range(1,(len(face)-1)):
+                indexed_vertex_infos_list.extend(face[0:1]+face[i:i+2])
+        elif len(face) == 3:
+            indexed_vertex_infos_list = face
+        else:
+            print("error: the number of face information is less than 3")
+        
+        for indexed_vertex_infos in indexed_vertex_infos_list:
+            vertex_info = []
+            #print(indexed_vertex_infos)
+            #print(g_obj_v)
+            ## vertex position
+            vertex_info.extend(g_obj_v[indexed_vertex_infos[0]])
+            #print("<position>: ", g_obj_v[indexed_vertex_infos[0]])
+            
+            ## vertex normal
+            if indexed_vertex_infos[2] != None:
+                vertex_info.extend(g_obj_vn[indexed_vertex_infos[2]])
+                
+                #print("<normal>: ", g_obj_vn[indexed_vertex_infos[2]])
+                ## normal이 있다면 vertices_with_normal에 저장
+                g_obj_vertices_with_normal.extend(vertex_info)
+            else:
+                ## normal이 없다면 vertices에 저장
+                #print(indexed_vertex_infos)
+                g_obj_vertices.extend(vertex_info)
+            #print(vertex_info)
+            #print()
+
+    
+    g_vao_obj= prepare_vao_obj_with_normal()
+    global g_debug_1
+    g_debug_1 = len(g_obj_vertices_with_normal)/6
+        
+
     
     
 
@@ -536,37 +604,11 @@ def prepare_vao_grid():
 
     return VAO
 
-def prepare_vao_obj():
-    # prepare vertex data (in main memory)
-    # 8 vertices
-    vertices = glm.array(glm.float32,
-        # position      color
-        -1 ,  1 ,  1 ,  1, 1, 1, # v0
-         1 ,  1 ,  1 ,  1, 1, 1, # v1
-         1 , -1 ,  1 ,  1, 1, 1, # v2
-        -1 , -1 ,  1 ,  1, 1, 1, # v3
-        -1 ,  1 , -1 ,  1, 1, 1, # v4
-         1 ,  1 , -1 ,  1, 1, 1, # v5
-         1 , -1 , -1 ,  1, 1, 1, # v6
-        -1 , -1 , -1 ,  1, 1, 1, # v7
-    )
+def prepare_vao_obj_with_normal():
 
-    # prepare index data
-    # 12 triangles
-    indices = glm.array(glm.uint32,
-        0,2,1,
-        0,3,2,
-        4,5,6,
-        4,6,7,
-        0,1,5,
-        0,5,4,
-        3,6,2,
-        3,7,6,
-        1,2,6,
-        1,6,5,
-        0,7,3,
-        0,4,7,
-    )
+    # prepare vertex data (in main memory)
+    # 36 vertices for 12 triangles
+    vertices = glm.array(np.array(g_obj_vertices_with_normal,glm.float32))
 
     # create and activate VAO (vertex array object)
     VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
@@ -576,23 +618,17 @@ def prepare_vao_obj():
     VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
     glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
 
-    # create and activate EBO (element buffer object)
-    EBO = glGenBuffers(1)   # create a buffer object ID and store it to EBO variable
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO)  # activate EBO as an element buffer object
-
     # copy vertex data to VBO
     glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
-
-    # copy index data to EBO
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy index data to the currently bound element buffer
 
     # configure vertex positions
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
     glEnableVertexAttribArray(0)
 
-    # configure vertex colors
+    # configure vertex normals
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
     glEnableVertexAttribArray(1)
+
 
     return VAO
 
@@ -613,11 +649,13 @@ def draw_cube(vao, MVP, M, matcolor, unif_locs):
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
 
-def draw_obj_file(vao, MVP, M, matcolor, unif_locs, vertex_count):
+def draw_obj_with_normal(vao, MVP, M, matcolor, unif_locs):
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
     glUniform3f(unif_locs['material_color'], matcolor.r, matcolor.g, matcolor.b)
-    glBindVertexArray(vao)
+    glBindVertexArray(g_vao_obj)
+    #vertex_count = int(len(g_obj_vertices_with_normal)/6)
+    vertex_count = int(g_debug_1)
     glDrawArrays(GL_TRIANGLES, 0, vertex_count)
 
 def main():
@@ -662,6 +700,7 @@ def main():
     vao_frame = prepare_vao_frame()
     vao_grid = prepare_vao_grid()
     vao_box = prepare_vao_box()
+    vao_obj = g_vao_obj
 
     # loop until the user closes the window
     while not glfwWindowShouldClose(window):
@@ -705,9 +744,11 @@ def main():
         glUseProgram(shader_lighting)
         
         #@ draw current box
-        draw_cube(vao_box, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
+        #draw_cube(vao_box, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
         
         #@ draw obj file
+        if g_rendering_mode == 0:
+            draw_obj_with_normal(vao_obj, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
         
         
         ## animating
