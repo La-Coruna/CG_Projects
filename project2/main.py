@@ -39,19 +39,14 @@ g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 0.1, 100) # f
 g_P_toggle = True
 
 # for obj file to be loaded
-g_obj_file = None
-g_obj_v = []
-g_obj_vn = []
-g_obj_f = []
-
-g_obj_vertices=[]
-g_obj_vertices_with_normal=[]
-g_vao_obj = None
+g_single_mode_obj_path = None
 
 # for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
 # basic 
 g_rendering_mode_toggle = 1
 g_wireframe_solid_toggle = 1
+
+g_boat_obj_path = os.join("obj_file","boat.obj")
 
 # ! for debug
 g_debug_1 = 0
@@ -363,28 +358,25 @@ def parsing_face_info(polygon_face_info):
         parsing.append( [v_idx, texture_idx, vn_idx] )
     return parsing
 
-def drop_callback(window, paths):
-    print(paths)
-    global g_obj_file, g_obj_v, g_obj_vn, g_obj_f, g_rendering_mode_toggle
-    global g_obj_vertices, g_obj_vertices_with_normal, g_vao_obj
-    g_obj_file = open(paths[0], 'r')
-    g_obj_v = []
-    g_obj_vn = []
-    g_obj_f = []
+def open_and_parse_obj_file(paths):
+    obj_file = open(paths[0], 'r')
+    obj_v = []
+    obj_vn = []
+    obj_f = []
     
-    g_obj_vertices=[]
-    g_obj_vertices_with_normal=[]
-    g_vao_obj = None
-        
+    obj_vertices=[]
+    obj_vertices_with_normal=[]
+    
+    ## parsing
     # v : vertex positions
     # vn : vertex normals
     # f : face information
     # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
     # ! all argument indices are 1 based indices !
     acc = []
-    for line in g_obj_file:
+    for line in obj_file:
         fields = line.strip().split()
-        
+        #print(fields)
         if len(fields) == 0: # 빈 줄인 경우.
             continue
         
@@ -402,31 +394,15 @@ def drop_callback(window, paths):
             print(fields)
 
         if fields[0] == 'v':
-            g_obj_v.append( [float(x) for x in fields[1:]] )
+            obj_v.append( [float(x) for x in fields[1:]] )
         elif fields[0] == 'vn':
-            g_obj_vn.append( [float(x) for x in fields[1:]] )
+            obj_vn.append( [float(x) for x in fields[1:]] )
         elif fields[0] == 'f':
-            g_obj_f.append( parsing_face_info(fields[1:]) ) 
-                
-    g_obj_file.close()
-    
-    # print obj file, print out the following information of the obj file to stdout
-    print("Obj file name:", os.path.basename(paths[0]))
-    print("\nTotal number of faces:", len(g_obj_f))
-    print("\nNumber of faces with 3 vertices:", len([x for x in g_obj_f if len(x)==3]))
-    print("\nNumber of faces with 4 vertices:", len([x for x in g_obj_f if len(x)==4]))
-    print("\nNumber of faces with more than 4 vertices:", len([x for x in g_obj_f if len(x)>4]))
-    
-    # change mode to single mesh rendering mode
-    g_rendering_mode_toggle = 0
-    # print(g_obj_v)
-    # print(g_obj_vn)
-    # print(g_obj_f)
-    # print("----")
+            obj_f.append( parsing_face_info(fields[1:]) ) 
     
     # #1. vertices array
     
-    for face in g_obj_f:
+    for face in obj_f:
         #print(face)
         indexed_vertex_infos_list = []
         if len(face) > 3:
@@ -442,33 +418,31 @@ def drop_callback(window, paths):
         for indexed_vertex_infos in indexed_vertex_infos_list:
             vertex_info = []
             #print(indexed_vertex_infos)
-            #print(g_obj_v)
+            #print(obj_v)
             ## vertex position
-            vertex_info.extend(g_obj_v[indexed_vertex_infos[0]])
-            #print("<position>: ", g_obj_v[indexed_vertex_infos[0]])
+            vertex_info.extend(obj_v[indexed_vertex_infos[0]])
+            #print("<position>: ", obj_v[indexed_vertex_infos[0]])
             
             ## vertex normal
             if indexed_vertex_infos[2] != None:
-                vertex_info.extend(g_obj_vn[indexed_vertex_infos[2]])
+                vertex_info.extend(obj_vn[indexed_vertex_infos[2]])
                 
-                #print("<normal>: ", g_obj_vn[indexed_vertex_infos[2]])
                 ## normal이 있다면 vertices_with_normal에 저장
-                g_obj_vertices_with_normal.extend(vertex_info)
+                obj_vertices_with_normal.extend(vertex_info)
             else:
                 ## normal이 없다면 vertices에 저장
-                #print(indexed_vertex_infos)
-                g_obj_vertices.extend(vertex_info)
-            #print(vertex_info)
-            #print()
+                obj_vertices.extend(vertex_info)
 
-    
-    g_vao_obj= prepare_vao_obj_with_normal()
-    global g_debug_1
-    g_debug_1 = len(g_obj_vertices_with_normal)/6
-        
+    return (obj_vertices_with_normal,int(len(obj_vertices_with_normal)/6),
+            obj_vertices,int(len(obj_vertices)/6))
 
+def drop_callback(window, paths):
+    print(paths)
+    global g_single_mode_obj_path, g_rendering_mode_toggle
+    g_single_mode_obj_path=paths
     
-    
+    # change mode to single mesh rendering mode
+    g_rendering_mode_toggle = 0
 
 def prepare_vao_triangle():
     # prepare vertex data (in main memory)
@@ -706,11 +680,13 @@ def prepare_vao_cube():
     return VAO
 
 
-def prepare_vao_obj_with_normal():
+def prepare_vao_obj_with_normal(obj_file_path):
 
     # prepare vertex data (in main memory)
     # 36 vertices for 12 triangles
-    vertices = glm.array(np.array(g_obj_vertices_with_normal,glm.float32))
+    v, v_count, v2, v2_count = open_and_parse_obj_file(obj_file_path)
+    #print(v,v_count)
+    vertices = glm.array(np.array(v,glm.float32))
 
     # create and activate VAO (vertex array object)
     VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
@@ -731,8 +707,7 @@ def prepare_vao_obj_with_normal():
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
     glEnableVertexAttribArray(1)
 
-
-    return VAO
+    return VAO, v_count
 
 def draw_frame(vao, MVP, unif_locs):
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
@@ -751,13 +726,11 @@ def draw_cube(vao, MVP, M, matcolor, unif_locs):
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, 36)
 
-def draw_obj_with_normal(vao, MVP, M, matcolor, unif_locs):
+def draw_obj_with_normal(vao, MVP, M, matcolor, unif_locs, vertex_count):
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
     glUniform3f(unif_locs['material_color'], matcolor.r, matcolor.g, matcolor.b)
-    glBindVertexArray(g_vao_obj)
-    #vertex_count = int(len(g_obj_vertices_with_normal)/6)
-    vertex_count = int(g_debug_1)
+    glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, vertex_count)
 
 def main():
@@ -803,7 +776,6 @@ def main():
     vao_grid = prepare_vao_grid()
     vao_box = prepare_vao_box()
     vao_cube = prepare_vao_cube()
-    vao_obj = g_vao_obj
 
     # loop until the user closes the window
     while not glfwWindowShouldClose(window):
@@ -859,14 +831,12 @@ def main():
         #@ draw obj file
         global g_rendering_mode_toggle
         if g_rendering_mode_toggle == 0:
-            if g_obj_file == None:
+            if g_single_mode_obj_path == None:
                 g_rendering_mode_toggle = 1
             else:
-                #M = glm.scale((.25, .25, .25))
-                M = glm.scale((.001, .001, .001))
-                M = glm.scale((4, 4,4))
-                M = glm.scale((1, 1,1))
-                draw_obj_with_normal(vao_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting)
+                M = glm.mat4()
+                vao_single_mode_obj, vao_single_mode_obj_vertex_count = prepare_vao_obj_with_normal(g_single_mode_obj_path)
+                draw_obj_with_normal(vao_single_mode_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting, vao_single_mode_obj_vertex_count)
         
         #@ draw lab9
         else:
