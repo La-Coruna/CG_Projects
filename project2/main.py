@@ -38,7 +38,7 @@ g_view_width = g_view_height * 800/800
 g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 0.1, 100) # fov가 30도 ~ 60도 일 때 인간의 시야와 비슷.
 g_P_toggle = True
 
-# for obj file to be loaded
+# for single mode obj file 
 g_single_mode_obj_path = None
 
 # for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
@@ -46,7 +46,16 @@ g_single_mode_obj_path = None
 g_rendering_mode_toggle = 1
 g_wireframe_solid_toggle = 1
 
-g_boat_obj_path = os.join("obj_file","boat.obj")
+# obj path
+absolutepath = os.path.abspath(__file__)
+fileDirectory = os.path.dirname(absolutepath)
+g_boat_obj_path = os.path.join(fileDirectory,"obj_file","boat.obj")
+g_sail_obj_path = os.path.join(fileDirectory,"obj_file","sail.obj")
+g_bird_obj_path = os.path.join(fileDirectory,"obj_file","bird.obj")
+g_crab_obj_path = os.path.join(fileDirectory,"obj_file","crab.obj")
+g_cat_obj_path = os.path.join(fileDirectory,"obj_file","cat.obj")
+g_speaker_obj_path = os.path.join(fileDirectory,"obj_file","speaker.obj")
+g_shark_obj_path = os.path.join(fileDirectory,"obj_file","shark.obj")
 
 # ! for debug
 g_debug_1 = 0
@@ -358,8 +367,8 @@ def parsing_face_info(polygon_face_info):
         parsing.append( [v_idx, texture_idx, vn_idx] )
     return parsing
 
-def open_and_parse_obj_file(paths):
-    obj_file = open(paths[0], 'r')
+def open_and_parse_obj_file(path):
+    obj_file = open(path, 'r')
     obj_v = []
     obj_vn = []
     obj_f = []
@@ -403,10 +412,8 @@ def open_and_parse_obj_file(paths):
     # #1. vertices array
     
     for face in obj_f:
-        #print(face)
         indexed_vertex_infos_list = []
         if len(face) > 3:
-            #print("polygon이 triangle이 아닐 경우")
             for i in range(1,(len(face)-1)):
                 indexed_vertex_infos_list.extend(face[0:1]+face[i:i+2])
         elif len(face) == 3:
@@ -417,11 +424,8 @@ def open_and_parse_obj_file(paths):
         
         for indexed_vertex_infos in indexed_vertex_infos_list:
             vertex_info = []
-            #print(indexed_vertex_infos)
-            #print(obj_v)
             ## vertex position
             vertex_info.extend(obj_v[indexed_vertex_infos[0]])
-            #print("<position>: ", obj_v[indexed_vertex_infos[0]])
             
             ## vertex normal
             if indexed_vertex_infos[2] != None:
@@ -435,11 +439,62 @@ def open_and_parse_obj_file(paths):
 
     return (obj_vertices_with_normal,int(len(obj_vertices_with_normal)/6),
             obj_vertices,int(len(obj_vertices)/6))
+    
+def print_obj_info(path):
+    obj_file = open(path, 'r')
+    obj_v = []
+    obj_vn = []
+    obj_f = []
+    
+    obj_vertices=[]
+    obj_vertices_with_normal=[]
+    
+    ## parsing
+    # v : vertex positions
+    # vn : vertex normals
+    # f : face information
+    # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
+    # ! all argument indices are 1 based indices !
+    acc = []
+    for line in obj_file:
+        fields = line.strip().split()
+        #print(fields)
+        if len(fields) == 0: # 빈 줄인 경우.
+            continue
+        
+        # @ If previous line ends with backslash, this line is connected to the previous line
+        # @ then, this line is stored acc.
+        if fields[-1]=='\\':
+            acc.extend(fields[:-1])
+            continue
+        
+        # @ If there is previous line
+        if len(acc) != 0:
+            acc.extend(fields)
+            fields = acc
+            acc = []                 
+            print(fields)
+
+        if fields[0] == 'v':
+            obj_v.append( [float(x) for x in fields[1:]] )
+        elif fields[0] == 'vn':
+            obj_vn.append( [float(x) for x in fields[1:]] )
+        elif fields[0] == 'f':
+            obj_f.append( parsing_face_info(fields[1:]) ) 
+
+    print("Obj file name:", os.path.basename(path))
+    print("\nTotal number of faces:", len(obj_f))
+    print("\nNumber of faces with 3 vertices:", len([x for x in obj_f if len(x)==3]))
+    print("\nNumber of faces with 4 vertices:", len([x for x in obj_f if len(x)==4]))
+    print("\nNumber of faces with more than 4 vertices:", len([x for x in obj_f if len(x)>4]))
+    return
 
 def drop_callback(window, paths):
     print(paths)
     global g_single_mode_obj_path, g_rendering_mode_toggle
-    g_single_mode_obj_path=paths
+    g_single_mode_obj_path=paths[0]
+    
+    print_obj_info(g_single_mode_obj_path)
     
     # change mode to single mesh rendering mode
     g_rendering_mode_toggle = 0
@@ -841,32 +896,43 @@ def main():
         #@ draw lab9
         else:
             t = glfwGetTime()
-            xang = t
-            yang = glm.radians(30)
-            zang = glm.radians(30)
-            Rx = glm.rotate(xang, (1,0,0))
-            Ry = glm.rotate(yang, (0,1,0))
-            Rz = glm.rotate(zang, (0,0,1))
-            M = glm.mat4(Rz * Ry * Rx)
+            M = glm.mat4()
+            vao_boat_obj, vao_boat_obj_v_cnt = prepare_vao_obj_with_normal(g_boat_obj_path)
+            draw_obj_with_normal(vao_boat_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting, vao_boat_obj_v_cnt)
+            
+            vao_cat_obj, vao_cat_obj_v_cnt = prepare_vao_obj_with_normal(g_cat_obj_path)
+            draw_obj_with_normal(vao_cat_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting, vao_cat_obj_v_cnt)
+            
+            
+            
+            
+            
+            # xang = t
+            # yang = glm.radians(30)
+            # zang = glm.radians(30)
+            # Rx = glm.rotate(xang, (1,0,0))
+            # Ry = glm.rotate(yang, (0,1,0))
+            # Rz = glm.rotate(zang, (0,0,1))
+            # M = glm.mat4(Rz * Ry * Rx)
 
-            # set view_pos uniform in shader_lighting
-            glUseProgram(shader_lighting)
-            glUniform3f(unif_locs_lighting['view_pos'], view_pos.x, view_pos.y, view_pos.z)
+            # # set view_pos uniform in shader_lighting
+            # glUseProgram(shader_lighting)
+            # glUniform3f(unif_locs_lighting['view_pos'], view_pos.x, view_pos.y, view_pos.z)
 
-            # draw cubes
-            M = M * glm.scale((.25, .25, .25))
+            # # draw cubes
+            # M = M * glm.scale((.25, .25, .25))
 
-            Mo = M * glm.mat4()
-            draw_cube(vao_cube, P*V*Mo, Mo, glm.vec3(.5,.5,.5), unif_locs_lighting)
+            # Mo = M * glm.mat4()
+            # draw_cube(vao_cube, P*V*Mo, Mo, glm.vec3(.5,.5,.5), unif_locs_lighting)
 
-            Mx = M * glm.translate((2.5,0,0))
-            draw_cube(vao_cube, P*V*Mx, Mx, glm.vec3(1,0,0), unif_locs_lighting)
+            # Mx = M * glm.translate((2.5,0,0))
+            # draw_cube(vao_cube, P*V*Mx, Mx, glm.vec3(1,0,0), unif_locs_lighting)
 
-            My = M * glm.translate((0,2.5,0))
-            draw_cube(vao_cube, P*V*My, My, glm.vec3(0,1,0), unif_locs_lighting)
+            # My = M * glm.translate((0,2.5,0))
+            # draw_cube(vao_cube, P*V*My, My, glm.vec3(0,1,0), unif_locs_lighting)
 
-            Mz = M * glm.translate((0,0,2.5))
-            draw_cube(vao_cube, P*V*Mz, Mz, glm.vec3(0,0,1), unif_locs_lighting)
+            # Mz = M * glm.translate((0,0,2.5))
+            # draw_cube(vao_cube, P*V*Mz, Mz, glm.vec3(0,0,1), unif_locs_lighting)
         
         ## animating
         # t = glfwGetTime()
