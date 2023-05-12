@@ -50,7 +50,7 @@ g_vao_obj = None
 
 # for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
 # basic 
-g_rendering_mode = 1
+g_rendering_mode_toggle = 1
 g_wireframe_solid_toggle = 1
 
 # ! for debug
@@ -234,8 +234,8 @@ def key_callback(window, key, scancode, action, mods):
                 g_P_toggle = not g_P_toggle
                 update_projection_matrix()
             elif key==GLFW_KEY_H:
-                global g_rendering_mode
-                g_rendering_mode = not g_rendering_mode
+                global g_rendering_mode_toggle
+                g_rendering_mode_toggle = not g_rendering_mode_toggle
             elif key==GLFW_KEY_Z:
                 global g_wireframe_solid_toggle
                 g_wireframe_solid_toggle = not g_wireframe_solid_toggle
@@ -325,7 +325,7 @@ def scroll_callback(window, xoffset, yoffset):
     global g_cam_distance, g_ortho_mag
 
     # set sensitivity
-    sensitivity = 0.05
+    sensitivity = 0.3
     
     new_cam_distance = g_cam_distance - yoffset * sensitivity
     if new_cam_distance >= 0.2:
@@ -337,9 +337,35 @@ def scroll_callback(window, xoffset, yoffset):
         # if not g_P_toggle:
         #     update_projection_matrix()
 
+def parsing_face_info(polygon_face_info):
+    parsing = []
+    for vertex_info_with_slash in polygon_face_info:
+        vertex_info_list = vertex_info_with_slash.split('/')
+        
+        # ex) vertex_position_index
+        if len(vertex_info_list) == 1:
+            v_idx = int(vertex_info_list[0]) - 1
+            texture_idx = None
+            vn_idx = None
+            
+        # ex) vertex_position_index / texture_coordinates_index
+        elif len(vertex_info_list) == 2:
+            v_idx = int(vertex_info_list[0]) - 1
+            texture_idx = int(vertex_info_list[1]) - 1 if vertex_info_list[1] else None
+            vn_idx = None
+            
+        # ex) vertex_position_index / texture_coordinates_index / vertex_normal_index
+        elif len(vertex_info_list) == 3:
+            v_idx = int(vertex_info_list[0]) - 1
+            texture_idx = int(vertex_info_list[1]) - 1 if vertex_info_list[1] else None
+            vn_idx = int(vertex_info_list[2]) - 1 if vertex_info_list[2] else None
+            
+        parsing.append( [v_idx, texture_idx, vn_idx] )
+    return parsing
+
 def drop_callback(window, paths):
     print(paths)
-    global g_obj_file, g_obj_v, g_obj_vn, g_obj_f, g_rendering_mode
+    global g_obj_file, g_obj_v, g_obj_vn, g_obj_f, g_rendering_mode_toggle
     global g_obj_vertices, g_obj_vertices_with_normal, g_vao_obj
     g_obj_file = open(paths[0], 'r')
     g_obj_v = []
@@ -355,41 +381,32 @@ def drop_callback(window, paths):
     # f : face information
     # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
     # ! all argument indices are 1 based indices !
-    
+    acc = []
     for line in g_obj_file:
-        #print(line)
         fields = line.strip().split()
+        
         if len(fields) == 0: # 빈 줄인 경우.
             continue
-        elif fields[0] == 'v':
+        
+        # @ If previous line ends with backslash, this line is connected to the previous line
+        # @ then, this line is stored acc.
+        if fields[-1]=='\\':
+            acc.extend(fields[:-1])
+            continue
+        
+        # @ If there is previous line
+        if len(acc) != 0:
+            acc.extend(fields)
+            fields = acc
+            acc = []                 
+            print(fields)
+
+        if fields[0] == 'v':
             g_obj_v.append( [float(x) for x in fields[1:]] )
         elif fields[0] == 'vn':
             g_obj_vn.append( [float(x) for x in fields[1:]] )
         elif fields[0] == 'f':
-            face = []
-            for vtx in fields[1:]:
-                fields_of_vtx = vtx.split('/')
-                
-                # ex) vertex_position_index
-                if len(fields_of_vtx) == 1:
-                    v_idx = int(fields_of_vtx[0]) - 1
-                    texture_idx = None
-                    vn_idx = None
-                    
-                # ex) vertex_position_index / texture_coordinates_index
-                elif len(fields_of_vtx) == 2:
-                    v_idx = int(fields_of_vtx[0]) - 1
-                    texture_idx = int(fields_of_vtx[1]) - 1 if fields_of_vtx[1] else None
-                    vn_idx = None
-                    
-                # ex) vertex_position_index / texture_coordinates_index / vertex_normal_index
-                elif len(fields_of_vtx) == 3:
-                    v_idx = int(fields_of_vtx[0]) - 1
-                    texture_idx = int(fields_of_vtx[1]) - 1 if fields_of_vtx[1] else None
-                    vn_idx = int(fields_of_vtx[2]) - 1 if fields_of_vtx[2] else None
-                    
-                face.append( [v_idx, texture_idx, vn_idx] )
-            g_obj_f.append( face )
+            g_obj_f.append( parsing_face_info(fields[1:]) ) 
                 
     g_obj_file.close()
     
@@ -401,7 +418,7 @@ def drop_callback(window, paths):
     print("\nNumber of faces with more than 4 vertices:", len([x for x in g_obj_f if len(x)>4]))
     
     # change mode to single mesh rendering mode
-    g_rendering_mode = 0
+    g_rendering_mode_toggle = 0
     # print(g_obj_v)
     # print(g_obj_vn)
     # print(g_obj_f)
@@ -420,6 +437,7 @@ def drop_callback(window, paths):
             indexed_vertex_infos_list = face
         else:
             print("error: the number of face information is less than 3")
+            print(face)
         
         for indexed_vertex_infos in indexed_vertex_infos_list:
             vertex_info = []
@@ -832,20 +850,26 @@ def main():
         
         ## drawing lighting
         glUseProgram(shader_lighting)
+        #@ set uniform "view_pos" for specular
+        glUniform3f(unif_locs_lighting['view_pos'], cam_pos.x, cam_pos.y, cam_pos.z)
         
         #@ draw current box
         #draw_cube(vao_box, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
         
         #@ draw obj file
-        global g_rendering_mode
-        if g_rendering_mode == 0:
+        global g_rendering_mode_toggle
+        if g_rendering_mode_toggle == 0:
             if g_obj_file == None:
-                g_rendering_mode = 1
+                g_rendering_mode_toggle = 1
             else:
-                draw_obj_with_normal(vao_obj, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
+                #M = glm.scale((.25, .25, .25))
+                M = glm.scale((.001, .001, .001))
+                M = glm.scale((4, 4,4))
+                M = glm.scale((1, 1,1))
+                draw_obj_with_normal(vao_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting)
         
         #@ draw lab9
-        else :
+        else:
             t = glfwGetTime()
             xang = t
             yang = glm.radians(30)
