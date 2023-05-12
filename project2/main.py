@@ -232,6 +232,9 @@ def key_callback(window, key, scancode, action, mods):
                 global g_P_toggle
                 g_P_toggle = not g_P_toggle
                 update_projection_matrix()
+            elif key==GLFW_KEY_H:
+                global g_rendering_mode
+                g_rendering_mode = not g_rendering_mode
                 
             global g_debug_1
             if key==GLFW_KEY_1:
@@ -604,6 +607,83 @@ def prepare_vao_grid():
 
     return VAO
 
+
+def prepare_vao_cube():
+    # prepare vertex data (in main memory)
+    # 36 vertices for 12 triangles
+    vertices = glm.array(glm.float32,
+        # position      normal
+        -1 ,  1 ,  1 ,  0, 0, 1, # v0
+         1 , -1 ,  1 ,  0, 0, 1, # v2
+         1 ,  1 ,  1 ,  0, 0, 1, # v1
+
+        -1 ,  1 ,  1 ,  0, 0, 1, # v0
+        -1 , -1 ,  1 ,  0, 0, 1, # v3
+         1 , -1 ,  1 ,  0, 0, 1, # v2
+
+        -1 ,  1 , -1 ,  0, 0,-1, # v4
+         1 ,  1 , -1 ,  0, 0,-1, # v5
+         1 , -1 , -1 ,  0, 0,-1, # v6
+
+        -1 ,  1 , -1 ,  0, 0,-1, # v4
+         1 , -1 , -1 ,  0, 0,-1, # v6
+        -1 , -1 , -1 ,  0, 0,-1, # v7
+
+        -1 ,  1 ,  1 ,  0, 1, 0, # v0
+         1 ,  1 ,  1 ,  0, 1, 0, # v1
+         1 ,  1 , -1 ,  0, 1, 0, # v5
+
+        -1 ,  1 ,  1 ,  0, 1, 0, # v0
+         1 ,  1 , -1 ,  0, 1, 0, # v5
+        -1 ,  1 , -1 ,  0, 1, 0, # v4
+ 
+        -1 , -1 ,  1 ,  0,-1, 0, # v3
+         1 , -1 , -1 ,  0,-1, 0, # v6
+         1 , -1 ,  1 ,  0,-1, 0, # v2
+
+        -1 , -1 ,  1 ,  0,-1, 0, # v3
+        -1 , -1 , -1 ,  0,-1, 0, # v7
+         1 , -1 , -1 ,  0,-1, 0, # v6
+
+         1 ,  1 ,  1 ,  1, 0, 0, # v1
+         1 , -1 ,  1 ,  1, 0, 0, # v2
+         1 , -1 , -1 ,  1, 0, 0, # v6
+
+         1 ,  1 ,  1 ,  1, 0, 0, # v1
+         1 , -1 , -1 ,  1, 0, 0, # v6
+         1 ,  1 , -1 ,  1, 0, 0, # v5
+
+        -1 ,  1 ,  1 , -1, 0, 0, # v0
+        -1 , -1 , -1 , -1, 0, 0, # v7
+        -1 , -1 ,  1 , -1, 0, 0, # v3
+
+        -1 ,  1 ,  1 , -1, 0, 0, # v0
+        -1 ,  1 , -1 , -1, 0, 0, # v4
+        -1 , -1 , -1 , -1, 0, 0, # v7
+    )
+
+    # create and activate VAO (vertex array object)
+    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
+    glBindVertexArray(VAO)      # activate VAO
+
+    # create and activate VBO (vertex buffer object)
+    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
+    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
+
+    # copy vertex data to VBO
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
+
+    # configure vertex positions
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
+    glEnableVertexAttribArray(0)
+
+    # configure vertex normals
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
+    glEnableVertexAttribArray(1)
+
+    return VAO
+
+
 def prepare_vao_obj_with_normal():
 
     # prepare vertex data (in main memory)
@@ -700,6 +780,7 @@ def main():
     vao_frame = prepare_vao_frame()
     vao_grid = prepare_vao_grid()
     vao_box = prepare_vao_box()
+    vao_cube = prepare_vao_cube()
     vao_obj = g_vao_obj
 
     # loop until the user closes the window
@@ -721,6 +802,7 @@ def main():
             np.cos(g_cam_elevation) * np.cos(g_cam_azimuth)
             ) # cam_orbit
         cam_pos = cam_orbit + g_cam_pan
+        view_pos = cam_pos
         up = glm.vec3(.0, .1, .0) if np.rad2deg(g_cam_elevation) < 90 or np.rad2deg(g_cam_elevation) > 270 else glm.vec3(.0, -1, .0)
         
         # camera's vector
@@ -750,6 +832,35 @@ def main():
         if g_rendering_mode == 0:
             draw_obj_with_normal(vao_obj, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
         
+        #@ draw lab9
+                
+        t = glfwGetTime()
+        xang = t
+        yang = glm.radians(30)
+        zang = glm.radians(30)
+        Rx = glm.rotate(xang, (1,0,0))
+        Ry = glm.rotate(yang, (0,1,0))
+        Rz = glm.rotate(zang, (0,0,1))
+        M = glm.mat4(Rz * Ry * Rx)
+
+        # set view_pos uniform in shader_lighting
+        glUseProgram(shader_lighting)
+        glUniform3f(unif_locs_lighting['view_pos'], view_pos.x, view_pos.y, view_pos.z)
+
+        # draw cubes
+        M = M * glm.scale((.25, .25, .25))
+
+        Mo = M * glm.mat4()
+        draw_cube(vao_cube, P*V*Mo, Mo, glm.vec3(.5,.5,.5), unif_locs_lighting)
+
+        Mx = M * glm.translate((2.5,0,0))
+        draw_cube(vao_cube, P*V*Mx, Mx, glm.vec3(1,0,0), unif_locs_lighting)
+
+        My = M * glm.translate((0,2.5,0))
+        draw_cube(vao_cube, P*V*My, My, glm.vec3(0,1,0), unif_locs_lighting)
+
+        Mz = M * glm.translate((0,0,2.5))
+        draw_cube(vao_cube, P*V*Mz, Mz, glm.vec3(0,0,1), unif_locs_lighting)
         
         ## animating
         # t = glfwGetTime()
