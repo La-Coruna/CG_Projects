@@ -51,6 +51,7 @@ g_vao_obj = None
 # for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
 # basic 
 g_rendering_mode = 1
+g_wireframe_solid_toggle = 1
 
 # ! for debug
 g_debug_1 = 0
@@ -235,6 +236,9 @@ def key_callback(window, key, scancode, action, mods):
             elif key==GLFW_KEY_H:
                 global g_rendering_mode
                 g_rendering_mode = not g_rendering_mode
+            elif key==GLFW_KEY_Z:
+                global g_wireframe_solid_toggle
+                g_wireframe_solid_toggle = not g_wireframe_solid_toggle
                 
             global g_debug_1
             if key==GLFW_KEY_1:
@@ -727,7 +731,7 @@ def draw_cube(vao, MVP, M, matcolor, unif_locs):
     glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
     glUniform3f(unif_locs['material_color'], matcolor.r, matcolor.g, matcolor.b)
     glBindVertexArray(vao)
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 16)
+    glDrawArrays(GL_TRIANGLES, 0, 36)
 
 def draw_obj_with_normal(vao, MVP, M, matcolor, unif_locs):
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
@@ -790,6 +794,10 @@ def main():
         # enable depth test (we'll see details later)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glEnable(GL_DEPTH_TEST)
+        if g_wireframe_solid_toggle:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+        else:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
 
         ## projection matrix
         P = g_P
@@ -829,38 +837,42 @@ def main():
         #draw_cube(vao_box, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
         
         #@ draw obj file
+        global g_rendering_mode
         if g_rendering_mode == 0:
-            draw_obj_with_normal(vao_obj, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
+            if g_obj_file == None:
+                g_rendering_mode = 1
+            else:
+                draw_obj_with_normal(vao_obj, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
         
         #@ draw lab9
-                
-        t = glfwGetTime()
-        xang = t
-        yang = glm.radians(30)
-        zang = glm.radians(30)
-        Rx = glm.rotate(xang, (1,0,0))
-        Ry = glm.rotate(yang, (0,1,0))
-        Rz = glm.rotate(zang, (0,0,1))
-        M = glm.mat4(Rz * Ry * Rx)
+        else :
+            t = glfwGetTime()
+            xang = t
+            yang = glm.radians(30)
+            zang = glm.radians(30)
+            Rx = glm.rotate(xang, (1,0,0))
+            Ry = glm.rotate(yang, (0,1,0))
+            Rz = glm.rotate(zang, (0,0,1))
+            M = glm.mat4(Rz * Ry * Rx)
 
-        # set view_pos uniform in shader_lighting
-        glUseProgram(shader_lighting)
-        glUniform3f(unif_locs_lighting['view_pos'], view_pos.x, view_pos.y, view_pos.z)
+            # set view_pos uniform in shader_lighting
+            glUseProgram(shader_lighting)
+            glUniform3f(unif_locs_lighting['view_pos'], view_pos.x, view_pos.y, view_pos.z)
 
-        # draw cubes
-        M = M * glm.scale((.25, .25, .25))
+            # draw cubes
+            M = M * glm.scale((.25, .25, .25))
 
-        Mo = M * glm.mat4()
-        draw_cube(vao_cube, P*V*Mo, Mo, glm.vec3(.5,.5,.5), unif_locs_lighting)
+            Mo = M * glm.mat4()
+            draw_cube(vao_cube, P*V*Mo, Mo, glm.vec3(.5,.5,.5), unif_locs_lighting)
 
-        Mx = M * glm.translate((2.5,0,0))
-        draw_cube(vao_cube, P*V*Mx, Mx, glm.vec3(1,0,0), unif_locs_lighting)
+            Mx = M * glm.translate((2.5,0,0))
+            draw_cube(vao_cube, P*V*Mx, Mx, glm.vec3(1,0,0), unif_locs_lighting)
 
-        My = M * glm.translate((0,2.5,0))
-        draw_cube(vao_cube, P*V*My, My, glm.vec3(0,1,0), unif_locs_lighting)
+            My = M * glm.translate((0,2.5,0))
+            draw_cube(vao_cube, P*V*My, My, glm.vec3(0,1,0), unif_locs_lighting)
 
-        Mz = M * glm.translate((0,0,2.5))
-        draw_cube(vao_cube, P*V*Mz, Mz, glm.vec3(0,0,1), unif_locs_lighting)
+            Mz = M * glm.translate((0,0,2.5))
+            draw_cube(vao_cube, P*V*Mz, Mz, glm.vec3(0,0,1), unif_locs_lighting)
         
         ## animating
         # t = glfwGetTime()
