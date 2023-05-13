@@ -64,7 +64,7 @@ g_fish1_obj_path = os.path.join(fileDirectory,"obj_file","fish1.obj")
 g_fish2_obj_path = os.path.join(fileDirectory,"obj_file","fish2.obj")
 
 # ! for debug
-g_debug_1 = 0
+# g_debug_1 = 0
 
 g_vertex_shader_src_lighting = '''
 #version 330 core
@@ -296,16 +296,16 @@ def key_callback(window, key, scancode, action, mods):
                 g_rendering_mode_toggle = not g_rendering_mode_toggle
             elif key==GLFW_KEY_Z:
                 global g_wireframe_solid_toggle
-                g_wireframe_solid_toggle = not g_wireframe_solid_toggle
-                
-            global g_debug_1
-            if key==GLFW_KEY_1:
-                if g_debug_1>0:
-                    g_debug_1 -=1
-                print(g_debug_1)
-            if key==GLFW_KEY_2:
-                g_debug_1 +=1
-                print(g_debug_1)
+                g_wireframe_solid_toggle = not g_wireframe_solid_toggle              
+            # ! for debug
+            # global g_debug_1
+            # if key==GLFW_KEY_1:
+            #     if g_debug_1>0:
+            #         g_debug_1 -=1
+            #     print(g_debug_1)
+            # if key==GLFW_KEY_2:
+            #     g_debug_1 +=1
+            #     print(g_debug_1)
 
 def cursor_callback(window, xpos, ypos):
     global g_cursor_last_xpos, g_cursor_last_ypos # for cursor
