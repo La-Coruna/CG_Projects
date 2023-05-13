@@ -667,7 +667,7 @@ def draw_single_mode(vao, VP, M, matcolor, unif_locs, vertex_count):
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, vertex_count)
     
-def draw_obj_node_with_normal_(vao, node, VP, unif_locs, vertex_count):
+def draw_obj_node(vao, node, VP, unif_locs, vertex_count):
     M = node.get_global_transform() * glm.scale(node.get_scale())
     MVP = VP * M
     color = node.get_color()
@@ -859,16 +859,16 @@ def main():
             boat.update_tree_global_transform()
 
             ## draw nodes
-            draw_obj_node_with_normal_(vao_boat_obj, boat, P*V, unif_locs_lighting, vao_boat_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_sail_obj, sail, P*V, unif_locs_lighting, vao_sail_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_cat_obj, cat, P*V, unif_locs_lighting, vao_cat_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_crab_obj, crab, P*V, unif_locs_lighting, vao_crab_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_bird_obj, bird, P*V, unif_locs_lighting, vao_bird_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_speaker_obj, speaker, P*V, unif_locs_lighting, vao_speaker_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_beachBall_obj, beachBall, P*V, unif_locs_lighting, vao_beachBall_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_shark_obj, shark, P*V, unif_locs_lighting, vao_shark_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_fish1_obj, fish1, P*V, unif_locs_lighting, vao_fish1_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_fish2_obj, fish2, P*V, unif_locs_lighting, vao_fish2_obj_v_cnt)
+            draw_obj_node(vao_boat_obj, boat, P*V, unif_locs_lighting, vao_boat_obj_v_cnt)
+            draw_obj_node(vao_sail_obj, sail, P*V, unif_locs_lighting, vao_sail_obj_v_cnt)
+            draw_obj_node(vao_cat_obj, cat, P*V, unif_locs_lighting, vao_cat_obj_v_cnt)
+            draw_obj_node(vao_crab_obj, crab, P*V, unif_locs_lighting, vao_crab_obj_v_cnt)
+            draw_obj_node(vao_bird_obj, bird, P*V, unif_locs_lighting, vao_bird_obj_v_cnt)
+            draw_obj_node(vao_speaker_obj, speaker, P*V, unif_locs_lighting, vao_speaker_obj_v_cnt)
+            draw_obj_node(vao_beachBall_obj, beachBall, P*V, unif_locs_lighting, vao_beachBall_obj_v_cnt)
+            draw_obj_node(vao_shark_obj, shark, P*V, unif_locs_lighting, vao_shark_obj_v_cnt)
+            draw_obj_node(vao_fish1_obj, fish1, P*V, unif_locs_lighting, vao_fish1_obj_v_cnt)
+            draw_obj_node(vao_fish2_obj, fish2, P*V, unif_locs_lighting, vao_fish2_obj_v_cnt)
 
         # swap front and back buffers
         glfwSwapBuffers(window)
