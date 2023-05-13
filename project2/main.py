@@ -40,6 +40,8 @@ g_P_toggle = True
 
 # for single mode obj file 
 g_single_mode_obj_path = None
+g_vao_single_mode_obj = None
+g_vao_single_mode_obj_vertex_count = None
 
 # for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
 # basic 
@@ -488,65 +490,18 @@ def open_and_parse_obj_file(path):
             else:
                 ## normal이 없다면 vertices에 저장
                 obj_vertices.extend(vertex_info)
+                
+        if (len(obj_vertices)!=0):
+            print("The obj file has some face information without vertex normal. We should know vertex normal to do lighting.")
 
-    return (obj_vertices_with_normal,int(len(obj_vertices_with_normal)/6),
-            obj_vertices,int(len(obj_vertices)/6))
-    
-def print_obj_info(path):
-    obj_file = open(path, 'r')
-    obj_v = []
-    obj_vn = []
-    obj_f = []
-    
-    obj_vertices=[]
-    obj_vertices_with_normal=[]
-    
-    ## parsing
-    # v : vertex positions
-    # vn : vertex normals
-    # f : face information
-    # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
-    # ! all argument indices are 1 based indices !
-    acc = []
-    for line in obj_file:
-        fields = line.strip().split()
-        #print(fields)
-        if len(fields) == 0: # 빈 줄인 경우.
-            continue
-        
-        # @ If previous line ends with backslash, this line is connected to the previous line
-        # @ then, this line is stored acc.
-        if fields[-1]=='\\':
-            acc.extend(fields[:-1])
-            continue
-        
-        # @ If there is previous line
-        if len(acc) != 0:
-            acc.extend(fields)
-            fields = acc
-            acc = []                 
-            print(fields)
-
-        if fields[0] == 'v':
-            obj_v.append( [float(x) for x in fields[1:]] )
-        elif fields[0] == 'vn':
-            obj_vn.append( [float(x) for x in fields[1:]] )
-        elif fields[0] == 'f':
-            obj_f.append( parsing_face_info(fields[1:]) ) 
-
-    print("Obj file name:", os.path.basename(path))
-    print("\nTotal number of faces:", len(obj_f))
-    print("\nNumber of faces with 3 vertices:", len([x for x in obj_f if len(x)==3]))
-    print("\nNumber of faces with 4 vertices:", len([x for x in obj_f if len(x)==4]))
-    print("\nNumber of faces with more than 4 vertices:", len([x for x in obj_f if len(x)>4]))
-    return
+    return (obj_vertices_with_normal,int(len(obj_vertices_with_normal)/6),obj_f)
 
 def drop_callback(window, paths):
     print(paths)
-    global g_single_mode_obj_path, g_rendering_mode_toggle
+    global g_single_mode_obj_path, g_rendering_mode_toggle, g_vao_single_mode_obj, g_vao_single_mode_obj_vertex_count
     g_single_mode_obj_path=paths[0]
     
-    print_obj_info(g_single_mode_obj_path)
+    g_vao_single_mode_obj, g_vao_single_mode_obj_vertex_count = prepare_vao_single_mode(g_single_mode_obj_path)
     
     # change mode to single mesh rendering mode
     g_rendering_mode_toggle = 0
@@ -555,12 +510,12 @@ def prepare_vao_frame():
     # prepare vertex data (in main memory)
     vertices = glm.array(glm.float32,
         # position        # color
-         -2.0, 0.0, 0.0,  1.0, 1.0, 1.0, # x-axis start
-         2.0, 0.0, 0.0,  1.0, 0.0, 0.0, # x-axis end 
-         0.0, -2.0, 0.0,  1.0, 1.0, 1.0, # y-axis start
-         0.0, 2.0, 0.0,  0.0, 1.0, 0.0, # y-axis end 
-         0.0, 0.0, -2.0,  1.0, 1.0, 1.0, # z-axis start
-         0.0, 0.0, 2.0,  0.0, 0.0, 1.0, # z-axis end 
+         -10.0, 0.0, 0.0,  1.0, 1.0, 1.0, # x-axis start
+         10.0, 0.0, 0.0,  1.0, 0.0, 0.0, # x-axis end 
+         0.0, -10.0, 0.0,  1.0, 1.0, 1.0, # y-axis start
+         0.0, 10.0, 0.0,  0.0, 1.0, 0.0, # y-axis end 
+         0.0, 0.0, -10.0,  1.0, 1.0, 1.0, # z-axis start
+         0.0, 0.0, 10.0,  0.0, 0.0, 1.0, # z-axis end 
     )
 
     # create and activate VAO (vertex array object)
@@ -628,88 +583,19 @@ def prepare_vao_grid():
 
     return VAO
 
-
-def prepare_vao_cube():
-    # prepare vertex data (in main memory)
-    # 36 vertices for 12 triangles
-    vertices = glm.array(glm.float32,
-        # position      normal
-        -1 ,  1 ,  1 ,  0, 0, 1, # v0
-         1 , -1 ,  1 ,  0, 0, 1, # v2
-         1 ,  1 ,  1 ,  0, 0, 1, # v1
-
-        -1 ,  1 ,  1 ,  0, 0, 1, # v0
-        -1 , -1 ,  1 ,  0, 0, 1, # v3
-         1 , -1 ,  1 ,  0, 0, 1, # v2
-
-        -1 ,  1 , -1 ,  0, 0,-1, # v4
-         1 ,  1 , -1 ,  0, 0,-1, # v5
-         1 , -1 , -1 ,  0, 0,-1, # v6
-
-        -1 ,  1 , -1 ,  0, 0,-1, # v4
-         1 , -1 , -1 ,  0, 0,-1, # v6
-        -1 , -1 , -1 ,  0, 0,-1, # v7
-
-        -1 ,  1 ,  1 ,  0, 1, 0, # v0
-         1 ,  1 ,  1 ,  0, 1, 0, # v1
-         1 ,  1 , -1 ,  0, 1, 0, # v5
-
-        -1 ,  1 ,  1 ,  0, 1, 0, # v0
-         1 ,  1 , -1 ,  0, 1, 0, # v5
-        -1 ,  1 , -1 ,  0, 1, 0, # v4
- 
-        -1 , -1 ,  1 ,  0,-1, 0, # v3
-         1 , -1 , -1 ,  0,-1, 0, # v6
-         1 , -1 ,  1 ,  0,-1, 0, # v2
-
-        -1 , -1 ,  1 ,  0,-1, 0, # v3
-        -1 , -1 , -1 ,  0,-1, 0, # v7
-         1 , -1 , -1 ,  0,-1, 0, # v6
-
-         1 ,  1 ,  1 ,  1, 0, 0, # v1
-         1 , -1 ,  1 ,  1, 0, 0, # v2
-         1 , -1 , -1 ,  1, 0, 0, # v6
-
-         1 ,  1 ,  1 ,  1, 0, 0, # v1
-         1 , -1 , -1 ,  1, 0, 0, # v6
-         1 ,  1 , -1 ,  1, 0, 0, # v5
-
-        -1 ,  1 ,  1 , -1, 0, 0, # v0
-        -1 , -1 , -1 , -1, 0, 0, # v7
-        -1 , -1 ,  1 , -1, 0, 0, # v3
-
-        -1 ,  1 ,  1 , -1, 0, 0, # v0
-        -1 ,  1 , -1 , -1, 0, 0, # v4
-        -1 , -1 , -1 , -1, 0, 0, # v7
-    )
-
-    # create and activate VAO (vertex array object)
-    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
-    glBindVertexArray(VAO)      # activate VAO
-
-    # create and activate VBO (vertex buffer object)
-    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
-    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
-
-    # copy vertex data to VBO
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
-
-    # configure vertex positions
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
-    glEnableVertexAttribArray(0)
-
-    # configure vertex normals
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
-    glEnableVertexAttribArray(1)
-
-    return VAO
-
-
 def prepare_vao_single_mode(obj_file_path):
 
     # prepare vertex data (in main memory)
     # 36 vertices for 12 triangles
-    v, v_count, v2, v2_count = open_and_parse_obj_file(obj_file_path)
+    v, v_count, obj_f = open_and_parse_obj_file(obj_file_path)
+    
+    print("Obj file name:", os.path.basename(g_single_mode_obj_path))
+    print("\nTotal number of faces:", len(obj_f))
+    print("\nNumber of faces with 3 vertices:", len([x for x in obj_f if len(x)==3]))
+    print("\nNumber of faces with 4 vertices:", len([x for x in obj_f if len(x)==4]))
+    print("\nNumber of faces with more than 4 vertices:", len([x for x in obj_f if len(x)>4]))
+    
+    ## v with normal
     #print(v,v_count)
     vertices = glm.array(np.array(v,glm.float32))
 
@@ -734,11 +620,11 @@ def prepare_vao_single_mode(obj_file_path):
 
     return VAO, v_count
 
-def prepare_vao_obj_with_normal(obj_file_path):
+def prepare_vao_obj(obj_file_path):
 
     # prepare vertex data (in main memory)
     # 36 vertices for 12 triangles
-    v, v_count, v2, v2_count = open_and_parse_obj_file(obj_file_path)
+    v, v_count, obj_f = open_and_parse_obj_file(obj_file_path)
     #print(v,v_count)
     vertices = glm.array(np.array(v,glm.float32))
 
@@ -773,15 +659,7 @@ def draw_grid(vao, MVP, unif_locs):
     glBindVertexArray(vao)
     glDrawArrays(GL_LINES, 0, 84)
 
-def draw_cube(vao, MVP, M, matcolor, unif_locs):
-    glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
-    glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
-    glUniform3f(unif_locs['material_color'], matcolor.r, matcolor.g, matcolor.b)
-    glBindVertexArray(vao)
-    glDrawArrays(GL_TRIANGLES, 0, 36)
-
 def draw_single_mode(vao, VP, M, matcolor, unif_locs, vertex_count):
-    #TODO matcolor 삭제
     MVP = VP * M
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
@@ -789,8 +667,7 @@ def draw_single_mode(vao, VP, M, matcolor, unif_locs, vertex_count):
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, vertex_count)
     
-def draw_obj_node_with_normal_(vao, node, VP, matcolor, unif_locs, vertex_count):
-    #TODO matcolor 삭제
+def draw_obj_node_with_normal_(vao, node, VP, unif_locs, vertex_count):
     M = node.get_global_transform() * glm.scale(node.get_scale())
     MVP = VP * M
     color = node.get_color()
@@ -840,7 +717,6 @@ def main():
     # prepare vaos
     vao_frame = prepare_vao_frame()
     vao_grid = prepare_vao_grid()
-    vao_cube = prepare_vao_cube()
 
     # loop until the user closes the window
     while not glfwWindowShouldClose(window):
@@ -866,7 +742,6 @@ def main():
             np.cos(g_cam_elevation) * np.cos(g_cam_azimuth)
             ) # cam_orbit
         cam_pos = cam_orbit + g_cam_pan
-        view_pos = cam_pos
         up = glm.vec3(.0, .1, .0) if np.rad2deg(g_cam_elevation) < 90 or np.rad2deg(g_cam_elevation) > 270 else glm.vec3(.0, -1, .0)
         
         # camera's vector
@@ -899,8 +774,8 @@ def main():
             else:
                 M = glm.mat4()
                 #TODO prepare_vao 바꾸기
-                vao_single_mode_obj, vao_single_mode_obj_vertex_count = prepare_vao_obj_with_normal(g_single_mode_obj_path)
-                draw_single_mode(vao_single_mode_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting, vao_single_mode_obj_vertex_count)
+                
+                draw_single_mode(g_vao_single_mode_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting, g_vao_single_mode_obj_vertex_count)
         
         #@ draw lab9
         else:
@@ -909,43 +784,43 @@ def main():
             
             ## prepare vao and node
             #@ boat
-            vao_boat_obj, vao_boat_obj_v_cnt = prepare_vao_obj_with_normal(g_boat_obj_path)
+            vao_boat_obj, vao_boat_obj_v_cnt = prepare_vao_obj(g_boat_obj_path)
             boat = Node(None, glm.vec3(1,1,1), glm.vec3(0.46, 0.31, 0.27))
             
             #@ sail
-            vao_sail_obj, vao_sail_obj_v_cnt = prepare_vao_obj_with_normal(g_sail_obj_path)
+            vao_sail_obj, vao_sail_obj_v_cnt = prepare_vao_obj(g_sail_obj_path)
             sail = Node(boat, glm.vec3(1,1,1), glm.vec3(0.99, 0.84, 0.57))
             
             #@ cat
-            vao_cat_obj, vao_cat_obj_v_cnt = prepare_vao_obj_with_normal(g_cat_obj_path)
-            cat = Node(boat, glm.vec3(1,1,1), glm.vec3(0.94, 0.89, 0.87))
+            vao_cat_obj, vao_cat_obj_v_cnt = prepare_vao_obj(g_cat_obj_path)
+            cat = Node(boat, glm.vec3(1,1,1), glm.vec3(0.65, 0.61, 0.55))
             
             #@ crab
-            vao_crab_obj, vao_crab_obj_v_cnt = prepare_vao_obj_with_normal(g_crab_obj_path)
+            vao_crab_obj, vao_crab_obj_v_cnt = prepare_vao_obj(g_crab_obj_path)
             crab = Node(sail, glm.vec3(.7,.7,.7), glm.vec3(0.99, 0.26, 0.39))
             
             #@ bird
-            vao_bird_obj, vao_bird_obj_v_cnt = prepare_vao_obj_with_normal(g_bird_obj_path)
+            vao_bird_obj, vao_bird_obj_v_cnt = prepare_vao_obj(g_bird_obj_path)
             bird = Node(sail, glm.vec3(1,1,1), glm.vec3(1,1,1))
             
             #@ speaker
-            vao_speaker_obj, vao_speaker_obj_v_cnt = prepare_vao_obj_with_normal(g_speaker_obj_path)
+            vao_speaker_obj, vao_speaker_obj_v_cnt = prepare_vao_obj(g_speaker_obj_path)
             speaker = Node(cat, glm.vec3(1,1,1), glm.vec3(0.92, 0.45, 0.34))
             
             #@ beachBall
-            vao_beachBall_obj, vao_beachBall_obj_v_cnt = prepare_vao_obj_with_normal(g_beachBall_obj_path)
+            vao_beachBall_obj, vao_beachBall_obj_v_cnt = prepare_vao_obj(g_beachBall_obj_path)
             beachBall = Node(cat, glm.vec3(1,1,1), glm.vec3(1, 0.73, 0.26))
             
             #@ shark
-            vao_shark_obj, vao_shark_obj_v_cnt = prepare_vao_obj_with_normal(g_shark_obj_path)
+            vao_shark_obj, vao_shark_obj_v_cnt = prepare_vao_obj(g_shark_obj_path)
             shark = Node(boat, glm.vec3(1,1,1), glm.vec3(0.46, 0.66, 0.68))
             
             #@ fish1
-            vao_fish1_obj, vao_fish1_obj_v_cnt = prepare_vao_obj_with_normal(g_fish1_obj_path)
+            vao_fish1_obj, vao_fish1_obj_v_cnt = prepare_vao_obj(g_fish1_obj_path)
             fish1 = Node(shark, glm.vec3(.5,.5,.5), glm.vec3(0.66, 0.67, 0.82))
             
             #@ fish2
-            vao_fish2_obj, vao_fish2_obj_v_cnt = prepare_vao_obj_with_normal(g_fish2_obj_path)
+            vao_fish2_obj, vao_fish2_obj_v_cnt = prepare_vao_obj(g_fish2_obj_path)
             fish2 = Node(shark, glm.vec3(.5,.5,.5), glm.vec3(0.79, 0.65, 0.76))
             
             # move_like_eight = glm.translate(glm.vec3(-5,0,0)) * glm.rotate(-t, glm.vec3(0,1,0)) * glm.translate(glm.vec3(5,0,0))* glm.translate(glm.vec3(0,0.2+0.1*glm.sin(t),0)) if glm.sin(t/2) > 0 else  glm.rotate(glm.pi(), glm.vec3(0,1,0)) * glm.translate(glm.vec3(-5,0,0)) * glm.rotate(t, glm.vec3(0,1,0)) * glm.translate(glm.vec3(5,0,0))* glm.translate(glm.vec3(0,0.2+0.1*glm.sin(t),0)) * glm.rotate(glm.pi(), glm.vec3(0,1,0))
@@ -961,7 +836,11 @@ def main():
                 * (glm.rotate(glm.pi(), glm.vec3(0,1,0)) if glm.cos(t) < 0 else glm.mat4() )
                 * glm.translate(glm.vec3(0,0.05+0.05*glm.sin(t*6),0))
             )
-            crab.set_transform((glm.translate(glm.vec3(.20,2.25,0))) * (glm.translate(glm.vec3(0,glm.sin(t),0)))* glm.rotate(-glm.pi()/2, glm.vec3(0,1,0)))
+            crab.set_transform((glm.translate(glm.vec3(.20,2.25,0)))
+                               * (glm.translate(glm.vec3(0,glm.sin(t),0)))
+                               * glm.rotate(-glm.pi()/2, glm.vec3(0,1,0))
+                               * glm.rotate(0.3*glm.sin(t*6), glm.vec3(1,0,0))
+                               )
             bird.set_transform((glm.translate(glm.vec3(0,4.3,-0.2)))* glm.translate(glm.vec3(0,0.1*(1+glm.sin(8*t)),0)) )
             speaker.set_transform(glm.translate(glm.vec3(0,0.7+0.1*glm.sin(t*6),0))*glm.rotate(0.3*glm.sin(t*3), glm.vec3(1,0,0)) * glm.rotate(glm.pi()/2, glm.vec3(0,1,0)))
             beachBall.set_transform(glm.translate(glm.vec3(0,.2,.6+.05*(glm.sin(8*t)))))
@@ -980,59 +859,16 @@ def main():
             boat.update_tree_global_transform()
 
             ## draw nodes
-            draw_obj_node_with_normal_(vao_boat_obj, boat, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_boat_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_sail_obj, sail, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_sail_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_cat_obj, cat, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_cat_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_crab_obj, crab, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_crab_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_bird_obj, bird, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_bird_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_speaker_obj, speaker, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_speaker_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_beachBall_obj, beachBall, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_beachBall_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_shark_obj, shark, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_shark_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_fish1_obj, fish1, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_fish1_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_fish2_obj, fish2, P*V, glm.vec3(0,1,1), unif_locs_lighting, vao_fish2_obj_v_cnt)
-            
-            # xang = t
-            # yang = glm.radians(30)
-            # zang = glm.radians(30)
-            # Rx = glm.rotate(xang, (1,0,0))
-            # Ry = glm.rotate(yang, (0,1,0))
-            # Rz = glm.rotate(zang, (0,0,1))
-            # M = glm.mat4(Rz * Ry * Rx)
-
-            # # set view_pos uniform in shader_lighting
-            # glUseProgram(shader_lighting)
-            # glUniform3f(unif_locs_lighting['view_pos'], view_pos.x, view_pos.y, view_pos.z)
-
-            # # draw cubes
-            # M = M * glm.scale((.25, .25, .25))
-
-            # Mo = M * glm.mat4()
-            # draw_cube(vao_cube, P*V*Mo, Mo, glm.vec3(.5,.5,.5), unif_locs_lighting)
-
-            # Mx = M * glm.translate((2.5,0,0))
-            # draw_cube(vao_cube, P*V*Mx, Mx, glm.vec3(1,0,0), unif_locs_lighting)
-
-            # My = M * glm.translate((0,2.5,0))
-            # draw_cube(vao_cube, P*V*My, My, glm.vec3(0,1,0), unif_locs_lighting)
-
-            # Mz = M * glm.translate((0,0,2.5))
-            # draw_cube(vao_cube, P*V*Mz, Mz, glm.vec3(0,0,1), unif_locs_lighting)
-        
-        ## animating
-        # t = glfwGetTime()
-
-        # # tranlation
-        # T = glm.translate(glm.vec3(np.sin(t), .2, 0.4))
-
-        # M = T
-
-        # # current frame: P*V*M
-        # MVP = P*V*M
-        # glUniformMatrix4fv(MVP_loc, 1, GL_FALSE, glm.value_ptr(MVP))
-
-        # # draw triangle w.r.t. the current frame
-        # glBindVertexArray(vao_triangle)
-        # glDrawArrays(GL_TRIANGLES, 0, 3)
+            draw_obj_node_with_normal_(vao_boat_obj, boat, P*V, unif_locs_lighting, vao_boat_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_sail_obj, sail, P*V, unif_locs_lighting, vao_sail_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_cat_obj, cat, P*V, unif_locs_lighting, vao_cat_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_crab_obj, crab, P*V, unif_locs_lighting, vao_crab_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_bird_obj, bird, P*V, unif_locs_lighting, vao_bird_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_speaker_obj, speaker, P*V, unif_locs_lighting, vao_speaker_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_beachBall_obj, beachBall, P*V, unif_locs_lighting, vao_beachBall_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_shark_obj, shark, P*V, unif_locs_lighting, vao_shark_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_fish1_obj, fish1, P*V, unif_locs_lighting, vao_fish1_obj_v_cnt)
+            draw_obj_node_with_normal_(vao_fish2_obj, fish2, P*V, unif_locs_lighting, vao_fish2_obj_v_cnt)
 
         # swap front and back buffers
         glfwSwapBuffers(window)
