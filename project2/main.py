@@ -100,39 +100,52 @@ uniform vec3 material_color;
 void main()
 {
     // light and material properties
-    vec3 light_pos = vec3(0,100,100);
+    vec3 light_pos = vec3(100,100,100);
     vec3 light_color = vec3(1,1,1);
+    vec3 light_pos2 = vec3(-100,100,-100);
+    vec3 light_color2 = vec3(1,1,1);
     float material_shininess = 32.0;
 
     // light components
     vec3 light_ambient = 0.1*light_color;
     vec3 light_diffuse = light_color;
     vec3 light_specular = light_color;
+    vec3 light_ambient2 = 0.1*light_color2;
+    vec3 light_diffuse2 = light_color2;
+    vec3 light_specular2 = light_color2;
 
     // material components
     vec3 material_ambient = material_color;
     vec3 material_diffuse = material_color;
     vec3 material_specular = light_color;  // for non-metal material
+    vec3 material_specular2 = light_color2;  // for non-metal material
 
     // ambient
     vec3 ambient = light_ambient * material_ambient;
+    vec3 ambient2 = light_ambient2 * material_ambient;
 
     // for diffiuse and specular
     vec3 normal = normalize(vout_normal);
     vec3 surface_pos = vout_surface_pos;
     vec3 light_dir = normalize(light_pos - surface_pos);
+    vec3 light_dir2 = normalize(light_pos2 - surface_pos);
 
     // diffuse
     float diff = max(dot(normal, light_dir), 0);
+    float diff2 = max(dot(normal, light_dir2), 0);
     vec3 diffuse = diff * light_diffuse * material_diffuse;
+    vec3 diffuse2 = diff2 * light_diffuse2 * material_diffuse;
 
     // specular
     vec3 view_dir = normalize(view_pos - surface_pos);
     vec3 reflect_dir = reflect(-light_dir, normal);
+    vec3 reflect_dir2 = reflect(-light_dir2, normal);
     float spec = pow( max(dot(view_dir, reflect_dir), 0.0), material_shininess);
+    float spec2 = pow( max(dot(view_dir, reflect_dir2), 0.0), material_shininess);
     vec3 specular = spec * light_specular * material_specular;
+    vec3 specular2 = spec * light_specular2 * material_specular;
 
-    vec3 color = ambient + diffuse + specular;
+    vec3 color = ambient + ambient2 + diffuse + specular + diffuse2 + specular2 ;
     FragColor = vec4(color, 1.);
 }
 '''
@@ -878,9 +891,6 @@ def main():
         #@ set uniform "view_pos" for specular
         glUniform3f(unif_locs_lighting['view_pos'], cam_pos.x, cam_pos.y, cam_pos.z)
         
-        #@ draw current box
-        #draw_cube(vao_box, P*V, glm.mat4(), glm.vec3(0,0,1), unif_locs_lighting)
-        
         #@ draw obj file
         global g_rendering_mode_toggle
         if g_rendering_mode_toggle == 0:
@@ -947,8 +957,9 @@ def main():
                 )            
             sail.set_transform(glm.translate(glm.vec3(0,0,-1.25))*glm.rotate(0.3*glm.sin(t),glm.vec3(0,1,0)))
             cat.set_transform(
-                glm.translate(glm.vec3(0,0,0.5+glm.sin(t)))
+                glm.translate(glm.vec3(0,0,0.6+glm.sin(t)))
                 * (glm.rotate(glm.pi(), glm.vec3(0,1,0)) if glm.cos(t) < 0 else glm.mat4() )
+                * glm.translate(glm.vec3(0,0.05+0.05*glm.sin(t*6),0))
             )
             crab.set_transform((glm.translate(glm.vec3(.20,2.25,0))) * (glm.translate(glm.vec3(0,glm.sin(t),0)))* glm.rotate(-glm.pi()/2, glm.vec3(0,1,0)))
             bird.set_transform((glm.translate(glm.vec3(0,4.3,-0.2)))* glm.translate(glm.vec3(0,0.1*(1+glm.sin(8*t)),0)) )
