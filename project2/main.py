@@ -772,9 +772,7 @@ def main():
             if g_single_mode_obj_path == None:
                 g_rendering_mode_toggle = 1
             else:
-                M = glm.mat4()
-                #TODO prepare_vao 바꾸기
-                
+                M = glm.mat4()              
                 draw_single_mode(g_vao_single_mode_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting, g_vao_single_mode_obj_vertex_count)
         
         #@ draw lab9
