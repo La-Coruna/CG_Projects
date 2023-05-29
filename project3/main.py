@@ -291,21 +291,15 @@ def key_callback(window, key, scancode, action, mods):
                 global g_P_toggle
                 g_P_toggle = not g_P_toggle
                 update_projection_matrix()
-            elif key==GLFW_KEY_H:
+            elif key==GLFW_KEY_1:
                 global g_rendering_mode_toggle
-                g_rendering_mode_toggle = not g_rendering_mode_toggle
-            elif key==GLFW_KEY_Z:
-                global g_wireframe_solid_toggle
-                g_wireframe_solid_toggle = not g_wireframe_solid_toggle
-                
-            global g_debug_1
-            if key==GLFW_KEY_1:
-                if g_debug_1>0:
-                    g_debug_1 -=1
-                print(g_debug_1)
-            if key==GLFW_KEY_2:
-                g_debug_1 +=1
-                print(g_debug_1)
+                g_rendering_mode_toggle = 0
+            elif key==GLFW_KEY_2:
+                global g_rendering_mode_toggle
+                g_rendering_mode_toggle = 1
+            elif key==GLFW_KEY_SPACE:
+                pass
+
 
 def cursor_callback(window, xpos, ypos):
     global g_cursor_last_xpos, g_cursor_last_ypos # for cursor
