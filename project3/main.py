@@ -4,7 +4,7 @@ import glm
 import ctypes
 import numpy as np
 import os
-
+import time
 
 
 # for mouse control
@@ -38,30 +38,22 @@ g_view_width = g_view_height * 800/800
 g_P = glm.perspective(np.deg2rad(45), g_view_width/g_view_height , 0.1, 100) # fov가 30도 ~ 60도 일 때 인간의 시야와 비슷.
 g_P_toggle = True
 
-# for single mode obj file 
-g_single_mode_obj_path = None
-g_vao_single_mode_obj = None
-g_vao_single_mode_obj_vertex_count = None
-
 # for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
-# basic 
 g_rendering_mode_toggle = 1
-g_wireframe_solid_toggle = 1
 
+#TODO 나중에 삭제해도 됨
 # obj path
 absolutepath = os.path.abspath(__file__)
 fileDirectory = os.path.dirname(absolutepath)
-g_water_obj_path = os.path.join(fileDirectory,"obj_file","water.obj")
-g_boat_obj_path = os.path.join(fileDirectory,"obj_file","boat.obj")
-g_sail_obj_path = os.path.join(fileDirectory,"obj_file","sail.obj")
-g_bird_obj_path = os.path.join(fileDirectory,"obj_file","bird.obj")
-g_crab_obj_path = os.path.join(fileDirectory,"obj_file","crab.obj")
-g_cat_obj_path = os.path.join(fileDirectory,"obj_file","cat.obj")
-g_speaker_obj_path = os.path.join(fileDirectory,"obj_file","speaker.obj")
-g_beachBall_obj_path = os.path.join(fileDirectory,"obj_file","beachBall.obj")
-g_shark_obj_path = os.path.join(fileDirectory,"obj_file","shark.obj")
-g_fish1_obj_path = os.path.join(fileDirectory,"obj_file","fish1.obj")
-g_fish2_obj_path = os.path.join(fileDirectory,"obj_file","fish2.obj")
+
+# bvh info
+g_node_list = None
+g_channel_list = None
+g_motion_data = None
+g_motion_data_line_num = 0
+g_motion_data_line_max = 0
+
+g_animate_toggle = False
 
 # ! for debug
 g_debug_1 = 0
@@ -186,8 +178,26 @@ void main()
 }
 '''
 
+class Channel:
+    def __init__(self, axis, type):
+        self.axis = axis
+        self.type = type
+    
+    def set_value(self, value):
+        self.value = value
+        
+    def get_axis(self):
+        return self.axis
+    def get_type(self):
+        return self.type
+    def get_value(self):
+        return self.value
+    
+    def toString(self):
+        return self.axis + self.type +": "+ str(self.value)
+
 class Node:
-    def __init__(self, parent, scale, color):
+    def __init__(self, parent, link_transform_from_parent, shape_transform, color, name):
         # hierarchy
         self.parent = parent
         self.children = []
@@ -195,31 +205,69 @@ class Node:
             parent.children.append(self)
 
         # transform
-        self.transform = glm.mat4()
+        self.link_transform_from_parent = link_transform_from_parent
+        self.joint_transform = glm.mat4()
         self.global_transform = glm.mat4()
 
         # shape
-        self.scale = scale
+        self.shape_transform = shape_transform
         self.color = color
+        
+        # ! for debug
+        self.name = name
 
-    def set_transform(self, transform):
-        self.transform = transform
+    def set_channels(self, channels):
+        self.channels = channels
+        
+    # def set_joint_transform(self, joint_transform):
+    #     self.joint_transform = joint_transform
+        
+    def calculate_joint_transform(self):
+        if self.channels == None:
+            self.joint_transform = glm.mat4()
+        else:
+            self.joint_transform = glm.mat4()
+            for channel in self.channels:
+                if channel.type == 'ROTATION':
+                    if channel.axis == 'X':
+                        J = glm.rotate(glm.radians(channel.value),glm.vec3(1,0,0))
+                    elif channel.axis == 'Y':
+                        J = glm.rotate(glm.radians(channel.value),glm.vec3(0,1,0))
+                    elif channel.axis == 'Z':
+                        J = glm.rotate(glm.radians(channel.value),glm.vec3(0,0,1))
+                if channel.type == 'POSITION':
+                    if channel.axis == 'X':
+                        J = glm.translate(glm.vec3(channel.value,0,0))
+                    elif channel.axis == 'Y':
+                        J = glm.translate(glm.vec3(0,channel.value,0))
+                    elif channel.axis == 'Z':
+                        J = glm.translate(glm.vec3(0,0,channel.value))
+                self.joint_transform = J * self.joint_transform
 
     def update_tree_global_transform(self):
         if self.parent is not None:
-            self.global_transform = self.parent.get_global_transform() * self.transform
+            self.global_transform = self.parent.get_global_transform() * self.link_transform_from_parent * self.joint_transform
         else:
-            self.global_transform = self.transform
+            self.global_transform = self.link_transform_from_parent * self.joint_transform
 
         for child in self.children:
             child.update_tree_global_transform()
 
     def get_global_transform(self):
         return self.global_transform
-    def get_scale(self):
-        return self.scale
+    def get_shape_transform(self):
+        return self.shape_transform
     def get_color(self):
         return self.color
+
+def update_channel_list_value(channel_list, motion_data, line_num):
+    for i in range(0,len(channel_list)):
+        channel_list[i].set_value(motion_data[line_num][i])
+    
+def update_node_list_joint_transform(node_list):
+    for node in node_list:
+        node.calculate_joint_transform()
+    
 
 def load_shaders(vertex_shader_source, fragment_shader_source):
     # build and compile our shader program
@@ -286,19 +334,24 @@ def key_callback(window, key, scancode, action, mods):
     if key==GLFW_KEY_ESCAPE and action==GLFW_PRESS:
         glfwSetWindowShouldClose(window, GLFW_TRUE)
     else:
+        global g_debug_1 # ! for debug
+        global g_P_toggle, g_rendering_mode_toggle, g_animate_toggle
         if action==GLFW_PRESS or action==GLFW_REPEAT:
             if key==GLFW_KEY_V:
-                global g_P_toggle
-                g_P_toggle = not g_P_toggle
                 update_projection_matrix()
             elif key==GLFW_KEY_1:
-                global g_rendering_mode_toggle
                 g_rendering_mode_toggle = 0
             elif key==GLFW_KEY_2:
-                global g_rendering_mode_toggle
                 g_rendering_mode_toggle = 1
             elif key==GLFW_KEY_SPACE:
-                pass
+                g_animate_toggle = not g_animate_toggle
+            elif key==GLFW_KEY_LEFT:
+                g_debug_1 -= 1
+                print("g_debug_1: ", g_debug_1)
+            elif key==GLFW_KEY_RIGHT:
+                g_debug_1 += 1
+                print("g_debug_1: ", g_debug_1)
+            
 
 
 def cursor_callback(window, xpos, ypos):
@@ -389,116 +442,113 @@ def scroll_callback(window, xoffset, yoffset):
         if not g_P_toggle:
             update_projection_matrix()
 
-def parsing_face_info(polygon_face_info):
-    parsing = []
-    for vertex_info_with_slash in polygon_face_info:
-        vertex_info_list = vertex_info_with_slash.split('/')
-        
-        # ex) vertex_position_index
-        if len(vertex_info_list) == 1:
-            v_idx = int(vertex_info_list[0]) - 1
-            texture_idx = None
-            vn_idx = None
-            
-        # ex) vertex_position_index / texture_coordinates_index
-        elif len(vertex_info_list) == 2:
-            v_idx = int(vertex_info_list[0]) - 1
-            texture_idx = int(vertex_info_list[1]) - 1 if vertex_info_list[1] else None
-            vn_idx = None
-            
-        # ex) vertex_position_index / texture_coordinates_index / vertex_normal_index
-        elif len(vertex_info_list) == 3:
-            v_idx = int(vertex_info_list[0]) - 1
-            texture_idx = int(vertex_info_list[1]) - 1 if vertex_info_list[1] else None
-            vn_idx = int(vertex_info_list[2]) - 1 if vertex_info_list[2] else None
-            
-        parsing.append( [v_idx, texture_idx, vn_idx] )
-    return parsing
+def parse_bvh_file(path):
+    node_list = [None]
+    channel_list = []
+    with open(path, 'r') as file:
+        lines = file.readlines()
 
-def open_and_parse_obj_file(path):
-    obj_file = open(path, 'r')
-    obj_v = []
-    obj_vn = []
-    obj_f = []
-    
-    obj_vertices=[]
-    obj_vertices_with_normal=[]
-    
-    ## parsing
-    # v : vertex positions
-    # vn : vertex normals
-    # f : face information
-    # ex) f vertex_position_index / texture_coordinates_index / vertex_normal_index
-    # ! all argument indices are 1 based indices !
-    acc = []
-    for line in obj_file:
-        fields = line.strip().split()
-        #print(fields)
-        if len(fields) == 0: # 빈 줄인 경우.
-            continue
-        
-        # @ If previous line ends with backslash, this line is connected to the previous line
-        # @ then, this line is stored acc.
-        if fields[-1]=='\\':
-            acc.extend(fields[:-1])
-            continue
-        
-        # @ If there is previous line
-        if len(acc) != 0:
-            acc.extend(fields)
-            fields = acc
-            acc = []                 
-            print(fields)
+        # variable declaration
+        joint_name_list = []
+        joint_name = None # ! for debug
+        offset = None
+        channels = []
 
-        if fields[0] == 'v':
-            obj_v.append( [float(x) for x in fields[1:]] )
-        elif fields[0] == 'vn':
-            obj_vn.append( [float(x) for x in fields[1:]] )
-        elif fields[0] == 'f':
-            obj_f.append( parsing_face_info(fields[1:]) ) 
-    
-    # #1. vertices array
-    
-    for face in obj_f:
-        indexed_vertex_infos_list = []
-        if len(face) > 3:
-            for i in range(1,(len(face)-1)):
-                indexed_vertex_infos_list.extend(face[0:1]+face[i:i+2])
-        elif len(face) == 3:
-            indexed_vertex_infos_list = face
-        else:
-            print("error: the number of face information is less than 3")
-            print(face)
-        
-        for indexed_vertex_infos in indexed_vertex_infos_list:
-            vertex_info = []
-            ## vertex position
-            vertex_info.extend(obj_v[indexed_vertex_infos[0]])
-            
-            ## vertex normal
-            if indexed_vertex_infos[2] != None:
-                vertex_info.extend(obj_vn[indexed_vertex_infos[2]])
-                
-                ## normal이 있다면 vertices_with_normal에 저장
-                obj_vertices_with_normal.extend(vertex_info)
-            else:
-                ## normal이 없다면 vertices에 저장
-                obj_vertices.extend(vertex_info)
-                
-        if (len(obj_vertices)!=0):
-            print("The obj file has some face information without vertex normal. We should know vertex normal to do lighting.")
+        # 모션 데이터를 저장할 변수
+        motion_data = []
 
-    return (obj_vertices_with_normal,int(len(obj_vertices_with_normal)/6),obj_f)
+        hierarchy_section = False
+        motion_section = False
+        
+        node_section = False
+        end_site_section = False
+        
+        parent_stack = [None]
+        
+        # ! for debug
+        #color_degree = 0.0625
+
+        for line in lines:
+            # 토큰 분할
+            tokens = line.upper().strip().split()
+
+            if tokens[0] == 'HIERARCHY':
+                hierarchy_section = True
+                motion_section = False
+            elif tokens[0] == 'MOTION':
+                hierarchy_section = False
+                motion_section = True
+            elif hierarchy_section:
+                ## ROOT or JOINT
+                if tokens[0] == 'ROOT' or tokens[0] == 'JOINT':
+                    joint_name_list.append(tokens[1])
+                    joint_name = tokens[1] # ! for debug
+                    node_section = True
+                ## End Site
+                elif tokens[0] == 'END':
+                    end_site_section = True
+                ## OFFSET
+                elif tokens[0] == 'OFFSET':
+                    #offset = [float(tokens[1]),float(tokens[2]),float(tokens[3])]
+                    offset = glm.translate(glm.vec3(float(tokens[1]),float(tokens[2]),float(tokens[3])))
+                    #TODO 다음에 나오는 offset을 전에 node의 길이로
+                ## CHANNEL
+                elif tokens[0] == 'CHANNELS':
+                    for channel_tokens in tokens[2:]:
+                        channel = Channel(channel_tokens[0],channel_tokens[1:])
+                        channel.set_value(0)# TODO 처음 시작은 motion data의 1로.
+                        channels.append(channel)
+                        channel_list.append(channel)
+                    ## 필요한 정보(JOINT, OFFSET, CHANNEL)가 모두 모였으면 NODE 생성
+                    if node_section and (offset != None) and (len(channels) != 0):
+                        #print(joint_name, color_degree) # ! for debug
+                        node = Node(parent_stack[-1],offset, glm.scale((.05,.05,.05)), glm.vec3(1,1,0),joint_name) #TODO scale 조정, 길이 넣는 걸로 해도 괜찮을 듯.
+                        #TODO 색깔설정 다시해주셈
+                        #color_degree += 0.0625 # ! for debug
+                        node.set_channels(channels) # channel 설정
+                        node_list.append(node)
+                        parent_stack.append(node)
+                        ## 사용한 정보 폐기
+                        node_section = False
+                        offset = None
+                        channels = []
+                elif tokens[0] == '}':
+                    if end_site_section:
+                        end_site_section = False
+                    else:
+                        del parent_stack[-1]
+            #TODO        
+            elif motion_section:
+                if tokens[0] == 'FRAMES:':
+                    # 프레임 수 추출
+                    frame_count = int(tokens[1])
+                elif tokens[0] == 'FRAME' and tokens[1] == 'TIME:':
+                    # 프레임 간 시간 간격 추출
+                    frame_time = float(tokens[2])
+                else:
+                    # 모션 데이터 추출
+                    motion_data.append([float(token) for token in tokens])
+
+    #print("node_list: ", node_list) # ! for debug
+    # 추출한 관절 정보와 모션 데이터 반환
+    #print(len(channel_list) == len(motion_data[1])  )
+    
+    return node_list[1:], channel_list, joint_name_list, frame_count, frame_time, motion_data
 
 def drop_callback(window, paths):
-    print(paths)
-    global g_single_mode_obj_path, g_rendering_mode_toggle, g_vao_single_mode_obj, g_vao_single_mode_obj_vertex_count
-    g_single_mode_obj_path=paths[0]
-    
-    g_vao_single_mode_obj, g_vao_single_mode_obj_vertex_count = prepare_vao_single_mode(g_single_mode_obj_path)
-    
-    # change mode to single mesh rendering mode
-    g_rendering_mode_toggle = 0
+    bvh_path=paths[0]
+    global g_node_list, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max
+    g_node_list, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
+    g_motion_data_line_num = 0
+    g_motion_data_line_max = len(g_motion_data)
+
+    # 파싱 결과 출력
+    print("g_node_list: ", g_node_list) # ! for debug
+    print("File name: ", paths[0])
+    print("Number of frames: ", frame_count)
+    print("FPS: ", frame_time)
+    print("Number of joints: ", len(joint_name_list))
+    print("List of all joint names: ", joint_name_list)
 
 def prepare_vao_frame():
     # prepare vertex data (in main memory)
@@ -555,6 +605,81 @@ def prepare_vao_grid():
         , dtype=np.float32))
 
     vertices = vertices_for_line_x.concat(vertices_for_line_z)
+
+    # create and activate VAO (vertex array object)
+    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
+    glBindVertexArray(VAO)      # activate VAO
+
+    # create and activate VBO (vertex buffer object)
+    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
+    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
+
+    # copy vertex data to VBO
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
+
+    # configure vertex positions
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
+    glEnableVertexAttribArray(0)
+
+    # configure vertex colors
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
+    glEnableVertexAttribArray(1)
+
+    return VAO
+
+def prepare_vao_cube():
+    # prepare vertex data (in main memory)
+    # 36 vertices for 12 triangles
+    vertices = glm.array(glm.float32,
+        # position      color
+        -1 ,  1 ,  1 ,  1, 1, 1, # v0
+         1 , -1 ,  1 ,  1, 1, 1, # v2
+         1 ,  1 ,  1 ,  1, 1, 1, # v1
+
+        -1 ,  1 ,  1 ,  1, 1, 1, # v0
+        -1 , -1 ,  1 ,  1, 1, 1, # v3
+         1 , -1 ,  1 ,  1, 1, 1, # v2
+
+        -1 ,  1 , -1 ,  1, 1, 1, # v4
+         1 ,  1 , -1 ,  1, 1, 1, # v5
+         1 , -1 , -1 ,  1, 1, 1, # v6
+
+        -1 ,  1 , -1 ,  1, 1, 1, # v4
+         1 , -1 , -1 ,  1, 1, 1, # v6
+        -1 , -1 , -1 ,  1, 1, 1, # v7
+
+        -1 ,  1 ,  1 ,  1, 1, 1, # v0
+         1 ,  1 ,  1 ,  1, 1, 1, # v1
+         1 ,  1 , -1 ,  1, 1, 1, # v5
+
+        -1 ,  1 ,  1 ,  1, 1, 1, # v0
+         1 ,  1 , -1 ,  1, 1, 1, # v5
+        -1 ,  1 , -1 ,  1, 1, 1, # v4
+ 
+        -1 , -1 ,  1 ,  1, 1, 1, # v3
+         1 , -1 , -1 ,  1, 1, 1, # v6
+         1 , -1 ,  1 ,  1, 1, 1, # v2
+
+        -1 , -1 ,  1 ,  1, 1, 1, # v3
+        -1 , -1 , -1 ,  1, 1, 1, # v7
+         1 , -1 , -1 ,  1, 1, 1, # v6
+
+         1 ,  1 ,  1 ,  1, 1, 1, # v1
+         1 , -1 ,  1 ,  1, 1, 1, # v2
+         1 , -1 , -1 ,  1, 1, 1, # v6
+
+         1 ,  1 ,  1 ,  1, 1, 1, # v1
+         1 , -1 , -1 ,  1, 1, 1, # v6
+         1 ,  1 , -1 ,  1, 1, 1, # v5
+
+        -1 ,  1 ,  1 ,  1, 1, 1, # v0
+        -1 , -1 , -1 ,  1, 1, 1, # v7
+        -1 , -1 ,  1 ,  1, 1, 1, # v3
+
+        -1 ,  1 ,  1 ,  1, 1, 1, # v0
+        -1 ,  1 , -1 ,  1, 1, 1, # v4
+        -1 , -1 , -1 ,  1, 1, 1, # v7
+    )
 
     # create and activate VAO (vertex array object)
     VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
@@ -661,15 +786,15 @@ def draw_single_mode(vao, VP, M, matcolor, unif_locs, vertex_count):
     glBindVertexArray(vao)
     glDrawArrays(GL_TRIANGLES, 0, vertex_count)
     
-def draw_obj_node_with_normal_(vao, node, VP, unif_locs, vertex_count):
-    M = node.get_global_transform() * glm.scale(node.get_scale())
+def draw_node(vao, node, VP, unif_locs):
+    M = node.get_global_transform() * node.get_shape_transform()
     MVP = VP * M
     color = node.get_color()
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
     glUniform3f(unif_locs['material_color'], color.r, color.g, color.b)
     glBindVertexArray(vao)
-    glDrawArrays(GL_TRIANGLES, 0, vertex_count)
+    glDrawArrays(GL_TRIANGLES, 0, 36)
 
 def main():
     # initialize glfw
@@ -711,6 +836,40 @@ def main():
     # prepare vaos
     vao_frame = prepare_vao_frame()
     vao_grid = prepare_vao_grid()
+    vao_cube = prepare_vao_cube()
+
+    # create a hirarchical model - Node(parent, link_transform_from_parent, shape_transform, color)
+    # hips =  Node(None,              glm.mat4(),                      glm.scale((1.,1.,1.)),      glm.vec3(0,0,1), 'test')
+    # spine = Node(hips,              glm.translate(glm.vec3(1,1,1)),  glm.scale((1.,1.,1.)),      glm.vec3(1,0,0))
+  
+    global g_node_list, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max
+    bvh_path = os.path.join(fileDirectory,"Project3-bvh","01_01.bvh")
+    bvh_path = os.path.join(fileDirectory,"Project3-bvh","sample-walk.bvh")
+    g_node_list, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
+    g_motion_data_line_num = 0
+    g_motion_data_line_max = len(g_motion_data)
+
+    # 파싱 결과 출력
+    # print("g_node_list: ", g_node_list) # ! for debug
+    # print("File name: ", path)
+    # print("Number of frames: ", frame_count)
+    # print("FPS: ", frame_time)
+    print("Number of joints: ", len(joint_name_list))
+    print("List of all joint names: ", joint_name_list)
+    #print("motion_data: ", g_motion_data)
+
+    update_channel_list_value(g_channel_list, g_motion_data, 0)
+    update_node_list_joint_transform(g_node_list)
+    
+    for node in g_node_list:
+        #print(node.name, node.color)
+        print(node.name, "->", node.parent.name if node.parent != None else "None")
+        print(node.link_transform_from_parent)
+        for channel in node.channels:
+            print(channel.toString())        
+        
+    # for channel in g_channel_list:
+    #     print(channel.toString())
 
     # loop until the user closes the window
     while not glfwWindowShouldClose(window):
@@ -718,12 +877,7 @@ def main():
 
         # enable depth test (we'll see details later)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glClearColor(0.79, 0.86, 0.91, 0)
         glEnable(GL_DEPTH_TEST)
-        if g_wireframe_solid_toggle:
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-        else:
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
 
         ## projection matrix
         P = g_P
@@ -756,114 +910,31 @@ def main():
         draw_grid(vao_grid, P*V, unif_locs_color)
         
         ## drawing lighting
+        # set uniform "view_pos" for specular
         glUseProgram(shader_lighting)
-        #@ set uniform "view_pos" for specular
         glUniform3f(unif_locs_lighting['view_pos'], cam_pos.x, cam_pos.y, cam_pos.z)
         
-        #@ draw obj file
-        global g_rendering_mode_toggle
-        if g_rendering_mode_toggle == 0:
-            if g_single_mode_obj_path == None:
-                g_rendering_mode_toggle = 1
-            else:
-                M = glm.mat4()
-                #TODO prepare_vao 바꾸기
-                
-                draw_single_mode(g_vao_single_mode_obj, P*V*M, M, glm.vec3(0,1,1), unif_locs_lighting, g_vao_single_mode_obj_vertex_count)
-        
-        #@ draw lab9
-        else:
-            t = glfwGetTime()
-            M = glm.mat4()
-            
-            ## prepare vao and node
-            #@ boat
-            vao_boat_obj, vao_boat_obj_v_cnt = prepare_vao_obj(g_boat_obj_path)
-            boat = Node(None, glm.vec3(1,1,1), glm.vec3(0.46, 0.31, 0.27))
-            
-            #@ sail
-            vao_sail_obj, vao_sail_obj_v_cnt = prepare_vao_obj(g_sail_obj_path)
-            sail = Node(boat, glm.vec3(1,1,1), glm.vec3(0.99, 0.84, 0.57))
-            
-            #@ cat
-            vao_cat_obj, vao_cat_obj_v_cnt = prepare_vao_obj(g_cat_obj_path)
-            cat = Node(boat, glm.vec3(1,1,1), glm.vec3(0.65, 0.61, 0.55))
-            
-            #@ crab
-            vao_crab_obj, vao_crab_obj_v_cnt = prepare_vao_obj(g_crab_obj_path)
-            crab = Node(sail, glm.vec3(.7,.7,.7), glm.vec3(0.99, 0.26, 0.39))
-            
-            #@ bird
-            vao_bird_obj, vao_bird_obj_v_cnt = prepare_vao_obj(g_bird_obj_path)
-            bird = Node(sail, glm.vec3(1,1,1), glm.vec3(1,1,1))
-            
-            #@ speaker
-            vao_speaker_obj, vao_speaker_obj_v_cnt = prepare_vao_obj(g_speaker_obj_path)
-            speaker = Node(cat, glm.vec3(1,1,1), glm.vec3(0.92, 0.45, 0.34))
-            
-            #@ beachBall
-            vao_beachBall_obj, vao_beachBall_obj_v_cnt = prepare_vao_obj(g_beachBall_obj_path)
-            beachBall = Node(cat, glm.vec3(1,1,1), glm.vec3(1, 0.73, 0.26))
-            
-            #@ shark
-            vao_shark_obj, vao_shark_obj_v_cnt = prepare_vao_obj(g_shark_obj_path)
-            shark = Node(boat, glm.vec3(1,1,1), glm.vec3(0.46, 0.66, 0.68))
-            
-            #@ fish1
-            vao_fish1_obj, vao_fish1_obj_v_cnt = prepare_vao_obj(g_fish1_obj_path)
-            fish1 = Node(shark, glm.vec3(.5,.5,.5), glm.vec3(0.66, 0.67, 0.82))
-            
-            #@ fish2
-            vao_fish2_obj, vao_fish2_obj_v_cnt = prepare_vao_obj(g_fish2_obj_path)
-            fish2 = Node(shark, glm.vec3(.5,.5,.5), glm.vec3(0.79, 0.65, 0.76))
-            
-            # move_like_eight = glm.translate(glm.vec3(-5,0,0)) * glm.rotate(-t, glm.vec3(0,1,0)) * glm.translate(glm.vec3(5,0,0))* glm.translate(glm.vec3(0,0.2+0.1*glm.sin(t),0)) if glm.sin(t/2) > 0 else  glm.rotate(glm.pi(), glm.vec3(0,1,0)) * glm.translate(glm.vec3(-5,0,0)) * glm.rotate(t, glm.vec3(0,1,0)) * glm.translate(glm.vec3(5,0,0))* glm.translate(glm.vec3(0,0.2+0.1*glm.sin(t),0)) * glm.rotate(glm.pi(), glm.vec3(0,1,0))
-            
+        #TODO 시작
+        if g_node_list != None:
             ## set local transformations of each node
-            boat.set_transform(
-                glm.rotate(-t/10, glm.vec3(0,1,0)) * glm.translate(glm.vec3(5,0,0))*
-                glm.translate(glm.vec3(0,0.2+0.1*glm.sin(t),0))
-                )            
-            sail.set_transform(glm.translate(glm.vec3(0,0,-1.25))*glm.rotate(0.3*glm.sin(t),glm.vec3(0,1,0)))
-            cat.set_transform(
-                glm.translate(glm.vec3(0,0,0.6+glm.sin(t)))
-                * (glm.rotate(glm.pi(), glm.vec3(0,1,0)) if glm.cos(t) < 0 else glm.mat4() )
-                * glm.translate(glm.vec3(0,0.05+0.05*glm.sin(t*6),0))
-            )
-            crab.set_transform((glm.translate(glm.vec3(.20,2.25,0)))
-                               * (glm.translate(glm.vec3(0,glm.sin(t),0)))
-                               * glm.rotate(-glm.pi()/2, glm.vec3(0,1,0))
-                               * glm.rotate(0.3*glm.sin(t*6), glm.vec3(1,0,0))
-                               )
-            bird.set_transform((glm.translate(glm.vec3(0,4.3,-0.2)))* glm.translate(glm.vec3(0,0.1*(1+glm.sin(8*t)),0)) )
-            speaker.set_transform(glm.translate(glm.vec3(0,0.7+0.1*glm.sin(t*6),0))*glm.rotate(0.3*glm.sin(t*3), glm.vec3(1,0,0)) * glm.rotate(glm.pi()/2, glm.vec3(0,1,0)))
-            beachBall.set_transform(glm.translate(glm.vec3(0,.2,.6+.05*(glm.sin(8*t)))))
-            shark.set_transform(glm.translate(glm.vec3(1,-1,0)) 
-                                
-                                *glm.rotate(0.3*glm.sin(t), glm.vec3(1,0,0))
-                                
-                                *glm.rotate(-t, glm.vec3(0,1,0))
-                                *glm.translate(glm.vec3(4,0,0)) 
-                                
-                                * glm.rotate(-glm.pi()/2, glm.vec3(0,1,0)))
-            fish1.set_transform(glm.translate(glm.vec3(1,0,0)) *glm.rotate(0.5*glm.sin(t*6), glm.vec3(1,0,0)) )
-            fish2.set_transform(glm.rotate((t*3), glm.vec3(1,0,0)) * glm.translate(glm.vec3(0,0,1))* glm.rotate(-(t*3), glm.vec3(1,0,0))* glm.rotate(glm.pi()/2, glm.vec3(0,1,0)))
-            
+            #TODO motion data를 바탕으로 반복문을 돌며 joint 수정.
+
             ## recursively update global transformations of all nodes
-            boat.update_tree_global_transform()
+            g_node_list[0].update_tree_global_transform()
 
             ## draw nodes
-            draw_obj_node_with_normal_(vao_boat_obj, boat, P*V, unif_locs_lighting, vao_boat_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_sail_obj, sail, P*V, unif_locs_lighting, vao_sail_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_cat_obj, cat, P*V, unif_locs_lighting, vao_cat_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_crab_obj, crab, P*V, unif_locs_lighting, vao_crab_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_bird_obj, bird, P*V, unif_locs_lighting, vao_bird_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_speaker_obj, speaker, P*V, unif_locs_lighting, vao_speaker_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_beachBall_obj, beachBall, P*V, unif_locs_lighting, vao_beachBall_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_shark_obj, shark, P*V, unif_locs_lighting, vao_shark_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_fish1_obj, fish1, P*V, unif_locs_lighting, vao_fish1_obj_v_cnt)
-            draw_obj_node_with_normal_(vao_fish2_obj, fish2, P*V, unif_locs_lighting, vao_fish2_obj_v_cnt)
-
+            for node in g_node_list:
+                draw_node(vao_cube, node, P*V, unif_locs_lighting)
+            
+            if g_animate_toggle:
+                g_motion_data_line_num += 1
+                if (g_motion_data_line_num == g_motion_data_line_max):
+                    g_motion_data_line_num = 0
+                update_channel_list_value(g_channel_list, g_motion_data, g_motion_data_line_num)
+                update_node_list_joint_transform(g_node_list)
+                time.sleep(frame_time)
+        #TODO 끝
+        
         # swap front and back buffers
         glfwSwapBuffers(window)
 
