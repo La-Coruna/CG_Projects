@@ -242,7 +242,7 @@ class Node:
                         J = glm.translate(glm.vec3(0,channel.value,0))
                     elif channel.axis == 'Z':
                         J = glm.translate(glm.vec3(0,0,channel.value))
-                self.joint_transform = J * self.joint_transform
+                self.joint_transform = self.joint_transform * J
 
     def update_tree_global_transform(self):
         if self.parent is not None:
@@ -535,12 +535,17 @@ def parse_bvh_file(path):
     
     return node_list[1:], channel_list, joint_name_list, frame_count, frame_time, motion_data
 
+# load bvh file
 def drop_callback(window, paths):
     bvh_path=paths[0]
-    global g_node_list, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max
+    global g_node_list, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max, g_animate_toggle
     g_node_list, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
     g_motion_data_line_num = 0
     g_motion_data_line_max = len(g_motion_data)
+    g_animate_toggle = False
+    
+    update_channel_list_value(g_channel_list, g_motion_data, 0)
+    update_node_list_joint_transform(g_node_list)
 
     # 파싱 결과 출력
     print("g_node_list: ", g_node_list) # ! for debug
