@@ -197,7 +197,7 @@ class Channel:
         return self.axis + self.type +": "+ str(self.value)
 
 class Node:
-    def __init__(self, parent, link_transform_from_parent, shape_transform, color, name):
+    def __init__(self, parent, offset, shape_transform, color, name):
         # hierarchy
         self.parent = parent
         self.children = []
@@ -205,7 +205,7 @@ class Node:
             parent.children.append(self)
 
         # transform
-        self.link_transform_from_parent = link_transform_from_parent
+        self.link_transform_from_parent = glm.translate(offset)
         self.joint_transform = glm.mat4()
         self.global_transform = glm.mat4()
 
@@ -213,14 +213,45 @@ class Node:
         self.shape_transform = shape_transform
         self.color = color
         
-        # ! for debug
         self.name = name
+        self.offset = offset
 
     def set_channels(self, channels):
         self.channels = channels
         
-    # def set_joint_transform(self, joint_transform):
-    #     self.joint_transform = joint_transform
+    def calculate_shape_transform(self):
+        
+        # # decide the child to shape with
+        child_to_shape_with = None
+        
+        if len(self.children) == 1 or len(self.children) == 2:
+            child_to_shape_with = self.children[0]
+        elif len(self.children) > 2:
+            is_exist_left = False
+            is_exist_right = False
+            non_direction_child = []
+            for child in self.children:
+                if child.name[0].upper() == 'LEFT':
+                    is_exist_left = True
+                elif child.name[0].upper() == 'RIGHT':
+                    is_exist_right = True
+                else:
+                    non_direction_child.append(child)
+                    
+            if is_exist_left and is_exist_right and len(non_direction_child) != 0:
+                child_to_shape_with = non_direction_child[0]
+            else:
+                child_to_shape_with = self.children[0]
+         
+        # TODO       
+        if child_to_shape_with != None:
+            print(self.name," shape with: ",child_to_shape_with.name, child_to_shape_with.offset)
+            self.shape_transform = glm.scale((1,1,1))
+            self.shape_transform = glm.scale((child_to_shape_with.offset))
+            x = child_to_shape_with.offset.x if ( child_to_shape_with.offset.x != 0 ) else 0.1
+            y = child_to_shape_with.offset.y if ( child_to_shape_with.offset.y != 0 ) else 0.1
+            z = child_to_shape_with.offset.z if ( child_to_shape_with.offset.z != 0 ) else 0.1
+            self.shape_transform = glm.scale((x,y,z))
         
     def calculate_joint_transform(self):
         if self.channels == None:
@@ -445,6 +476,7 @@ def scroll_callback(window, xoffset, yoffset):
 def parse_bvh_file(path):
     node_list = [None]
     channel_list = []
+    end_site_offset_list = []
     with open(path, 'r') as file:
         lines = file.readlines()
 
@@ -481,8 +513,8 @@ def parse_bvh_file(path):
             elif hierarchy_section:
                 ## ROOT or JOINT
                 if tokens[0] == 'ROOT' or tokens[0] == 'JOINT':
-                    joint_name_list.append(tokens[1])
-                    joint_name = tokens[1] # ! for debug
+                    joint_name = (line.strip().split())[1] # 모두 대문자로 변환시킨 것을 풀어주기 위해, 새로 할당.
+                    joint_name_list.append(joint_name)
                     node_section = True
                 ## End Site
                 elif tokens[0] == 'END':
@@ -490,7 +522,7 @@ def parse_bvh_file(path):
                 ## OFFSET
                 elif tokens[0] == 'OFFSET':
                     #offset = [float(tokens[1]),float(tokens[2]),float(tokens[3])]
-                    offset = glm.translate(glm.vec3(float(tokens[1]),float(tokens[2]),float(tokens[3])))
+                    offset = glm.vec3(float(tokens[1]),float(tokens[2]),float(tokens[3]))
                     #TODO 다음에 나오는 offset을 전에 node의 길이로
                 ## CHANNEL
                 elif tokens[0] == 'CHANNELS':
@@ -502,7 +534,7 @@ def parse_bvh_file(path):
                     ## 필요한 정보(JOINT, OFFSET, CHANNEL)가 모두 모였으면 NODE 생성
                     if node_section and (offset != None) and (len(channels) != 0):
                         #print(joint_name, color_degree) # ! for debug
-                        node = Node(parent_stack[-1],offset, glm.scale((.05,.05,.05)), glm.vec3(1,1,0),joint_name) #TODO scale 조정, 길이 넣는 걸로 해도 괜찮을 듯.
+                        node = Node(parent_stack[-1],offset, glm.scale((.1,.1,.1)), glm.vec3(1,1,0),joint_name) #TODO scale 조정, 길이 넣는 걸로 해도 괜찮을 듯.
                         #TODO 색깔설정 다시해주셈
                         #color_degree += 0.0625 # ! for debug
                         node.set_channels(channels) # channel 설정
@@ -515,6 +547,7 @@ def parse_bvh_file(path):
                 elif tokens[0] == '}':
                     if end_site_section:
                         end_site_section = False
+                        end_site_offset_list.append(offset)
                     else:
                         del parent_stack[-1]
             #TODO        
@@ -532,6 +565,8 @@ def parse_bvh_file(path):
     #print("node_list: ", node_list) # ! for debug
     # 추출한 관절 정보와 모션 데이터 반환
     #print(len(channel_list) == len(motion_data[1])  )
+    for node in node_list[1:]:
+        node.calculate_shape_transform()
     
     return node_list[1:], channel_list, joint_name_list, frame_count, frame_time, motion_data
 
@@ -637,53 +672,53 @@ def prepare_vao_cube():
     # 36 vertices for 12 triangles
     vertices = glm.array(glm.float32,
         # position      color
-        -1 ,  1 ,  1 ,  1, 1, 1, # v0
-         1 , -1 ,  1 ,  1, 1, 1, # v2
-         1 ,  1 ,  1 ,  1, 1, 1, # v1
+        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
+         0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v2
+         0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v1
 
-        -1 ,  1 ,  1 ,  1, 1, 1, # v0
-        -1 , -1 ,  1 ,  1, 1, 1, # v3
-         1 , -1 ,  1 ,  1, 1, 1, # v2
+        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
+        -0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v3
+         0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v2
 
-        -1 ,  1 , -1 ,  1, 1, 1, # v4
-         1 ,  1 , -1 ,  1, 1, 1, # v5
-         1 , -1 , -1 ,  1, 1, 1, # v6
+        -0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v4
+         0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v5
+         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
 
-        -1 ,  1 , -1 ,  1, 1, 1, # v4
-         1 , -1 , -1 ,  1, 1, 1, # v6
-        -1 , -1 , -1 ,  1, 1, 1, # v7
+        -0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v4
+         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
+        -0.5 , -0.5 , -0.5 ,  1, 1, 1, # v7
 
-        -1 ,  1 ,  1 ,  1, 1, 1, # v0
-         1 ,  1 ,  1 ,  1, 1, 1, # v1
-         1 ,  1 , -1 ,  1, 1, 1, # v5
+        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
+         0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v1
+         0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v5
 
-        -1 ,  1 ,  1 ,  1, 1, 1, # v0
-         1 ,  1 , -1 ,  1, 1, 1, # v5
-        -1 ,  1 , -1 ,  1, 1, 1, # v4
+        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
+         0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v5
+        -0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v4
  
-        -1 , -1 ,  1 ,  1, 1, 1, # v3
-         1 , -1 , -1 ,  1, 1, 1, # v6
-         1 , -1 ,  1 ,  1, 1, 1, # v2
+        -0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v3
+         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
+         0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v2
 
-        -1 , -1 ,  1 ,  1, 1, 1, # v3
-        -1 , -1 , -1 ,  1, 1, 1, # v7
-         1 , -1 , -1 ,  1, 1, 1, # v6
+        -0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v3
+        -0.5 , -0.5 , -0.5 ,  1, 1, 1, # v7
+         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
 
-         1 ,  1 ,  1 ,  1, 1, 1, # v1
-         1 , -1 ,  1 ,  1, 1, 1, # v2
-         1 , -1 , -1 ,  1, 1, 1, # v6
+         0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v1
+         0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v2
+         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
 
-         1 ,  1 ,  1 ,  1, 1, 1, # v1
-         1 , -1 , -1 ,  1, 1, 1, # v6
-         1 ,  1 , -1 ,  1, 1, 1, # v5
+         0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v1
+         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
+         0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v5
 
-        -1 ,  1 ,  1 ,  1, 1, 1, # v0
-        -1 , -1 , -1 ,  1, 1, 1, # v7
-        -1 , -1 ,  1 ,  1, 1, 1, # v3
+        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
+        -0.5 , -0.5 , -0.5 ,  1, 1, 1, # v7
+        -0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v3
 
-        -1 ,  1 ,  1 ,  1, 1, 1, # v0
-        -1 ,  1 , -1 ,  1, 1, 1, # v4
-        -1 , -1 , -1 ,  1, 1, 1, # v7
+        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
+        -0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v4
+        -0.5 , -0.5 , -0.5 ,  1, 1, 1, # v7
     )
 
     # create and activate VAO (vertex array object)
@@ -707,21 +742,14 @@ def prepare_vao_cube():
 
     return VAO
 
-def prepare_vao_single_mode(obj_file_path):
-
+def prepare_vao_line():
     # prepare vertex data (in main memory)
     # 36 vertices for 12 triangles
-    v, v_count, obj_f = open_and_parse_obj_file(obj_file_path)
-    
-    print("Obj file name:", os.path.basename(g_single_mode_obj_path))
-    print("\nTotal number of faces:", len(obj_f))
-    print("\nNumber of faces with 3 vertices:", len([x for x in obj_f if len(x)==3]))
-    print("\nNumber of faces with 4 vertices:", len([x for x in obj_f if len(x)==4]))
-    print("\nNumber of faces with more than 4 vertices:", len([x for x in obj_f if len(x)>4]))
-    
-    ## v with normal
-    #print(v,v_count)
-    vertices = glm.array(np.array(v,glm.float32))
+    vertices = glm.array(glm.float32,
+        # position      color
+        -1 ,  0 ,  0 ,  1, 1, 1, # v0
+         1 ,  0 ,  0 ,  1, 1, 1, # v2
+    )
 
     # create and activate VAO (vertex array object)
     VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
@@ -738,40 +766,11 @@ def prepare_vao_single_mode(obj_file_path):
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
     glEnableVertexAttribArray(0)
 
-    # configure vertex normals
+    # configure vertex colors
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
     glEnableVertexAttribArray(1)
 
-    return VAO, v_count
-
-def prepare_vao_obj(obj_file_path):
-
-    # prepare vertex data (in main memory)
-    # 36 vertices for 12 triangles
-    v, v_count, obj_f = open_and_parse_obj_file(obj_file_path)
-    #print(v,v_count)
-    vertices = glm.array(np.array(v,glm.float32))
-
-    # create and activate VAO (vertex array object)
-    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
-    glBindVertexArray(VAO)      # activate VAO
-
-    # create and activate VBO (vertex buffer object)
-    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
-    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
-
-    # copy vertex data to VBO
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
-
-    # configure vertex positions
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
-    glEnableVertexAttribArray(0)
-
-    # configure vertex normals
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
-    glEnableVertexAttribArray(1)
-
-    return VAO, v_count
+    return VAO
 
 def draw_frame(vao, MVP, unif_locs):
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
@@ -782,16 +781,16 @@ def draw_grid(vao, MVP, unif_locs):
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glBindVertexArray(vao)
     glDrawArrays(GL_LINES, 0, 84)
-
-def draw_single_mode(vao, VP, M, matcolor, unif_locs, vertex_count):
-    MVP = VP * M
-    glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
-    glUniformMatrix4fv(unif_locs['M'], 1, GL_FALSE, glm.value_ptr(M))
-    glUniform3f(unif_locs['material_color'], matcolor.r, matcolor.g, matcolor.b)
-    glBindVertexArray(vao)
-    glDrawArrays(GL_TRIANGLES, 0, vertex_count)
     
-def draw_node(vao, node, VP, unif_locs):
+def draw_node_with_line(vao, node, VP, unif_locs):
+    M = node.get_global_transform() * node.get_shape_transform()
+    MVP = VP * M
+    #color = node.get_color()
+    glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+    glBindVertexArray(vao)
+    glDrawArrays(GL_LINES, 0, 2)
+
+def draw_node_with_cube(vao, node, VP, unif_locs):
     M = node.get_global_transform() * node.get_shape_transform()
     MVP = VP * M
     color = node.get_color()
@@ -866,12 +865,12 @@ def main():
     update_channel_list_value(g_channel_list, g_motion_data, 0)
     update_node_list_joint_transform(g_node_list)
     
-    for node in g_node_list:
-        #print(node.name, node.color)
-        print(node.name, "->", node.parent.name if node.parent != None else "None")
-        print(node.link_transform_from_parent)
-        for channel in node.channels:
-            print(channel.toString())        
+    # for node in g_node_list:
+    #     #print(node.name, node.color)
+    #     print(node.name, "->", node.parent.name if node.parent != None else "None")
+    #     print(node.link_transform_from_parent)
+    #     for channel in node.channels:
+    #         print(channel.toString())        
         
     # for channel in g_channel_list:
     #     print(channel.toString())
@@ -929,7 +928,7 @@ def main():
 
             ## draw nodes
             for node in g_node_list:
-                draw_node(vao_cube, node, P*V, unif_locs_lighting)
+                draw_node_with_cube(vao_cube, node, P*V, unif_locs_lighting)
             
             if g_animate_toggle:
                 g_motion_data_line_num += 1
