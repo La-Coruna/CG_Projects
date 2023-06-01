@@ -197,7 +197,7 @@ class Channel:
         return self.axis + self.type +": "+ str(self.value)
 
 class Node:
-    def __init__(self, parent, offset, shape_transform, color, name):
+    def __init__(self, parent, offset, color, name):
         # hierarchy
         self.parent = parent
         self.children = []
@@ -210,7 +210,10 @@ class Node:
         self.global_transform = glm.mat4()
 
         # shape
-        self.shape_transform = shape_transform
+        self.shape_transform = glm.mat4()
+        self.line_transform = glm.mat4()
+        self.aux_line_transform = glm.mat4()
+
         self.color = color
         
         self.name = name
@@ -243,15 +246,39 @@ class Node:
             else:
                 child_to_shape_with = self.children[0]
          
+        # if child_to_shape_with.name == "END":
+        #     print("장난말고 나와라.", self.name, child_to_shape_with.name)
+        
+         
         # TODO       
-        if child_to_shape_with != None:
-            print(self.name," shape with: ",child_to_shape_with.name, child_to_shape_with.offset)
-            self.shape_transform = glm.scale((1,1,1))
-            self.shape_transform = glm.scale((child_to_shape_with.offset))
-            x = child_to_shape_with.offset.x if ( child_to_shape_with.offset.x != 0 ) else 0.1
-            y = child_to_shape_with.offset.y if ( child_to_shape_with.offset.y != 0 ) else 0.1
-            z = child_to_shape_with.offset.z if ( child_to_shape_with.offset.z != 0 ) else 0.1
-            self.shape_transform = glm.scale((x,y,z))
+        if child_to_shape_with != None: # TODO 질히면 이 조건문 없애도 될 지도.
+            length = glm.vec3(.1,.1,.1)
+            line_length = glm.vec3(0.,0.,0.) # for line
+            retouch_translate=glm.vec3(-0.5,-0.5,-0.5)
+            only_direction = glm.vec3(1,1,1) # for vao_line
+            magnitude = glm.length(child_to_shape_with.offset)
+            max_index = np.argmax(np.abs(child_to_shape_with.offset))
+
+            if child_to_shape_with.name.upper() == "END":
+                print(child_to_shape_with.name, max_index, child_to_shape_with.offset)
+                
+            if child_to_shape_with.offset[max_index] < 0 :
+                magnitude = -magnitude
+                only_direction[max_index] = -1
+                  
+            length[max_index] = magnitude
+            line_length[max_index] = magnitude # for line
+            retouch_translate[max_index] = 0
+            
+
+            #print(self.name," shape with: ",child_to_shape_with.name, child_to_shape_with.offset)
+            # self.shape_transform = glm.scale(length) * glm.translate(glm.vec3(-0.1,-0.1,-0.1))
+            # self.shape_transform = glm.scale(length) * glm.translate(glm.vec3(-0.5,-0.5,-0.5))
+            self.shape_transform = glm.scale(length) * glm.translate(retouch_translate)
+            self.line_transform = glm.scale(line_length)
+            self.aux_line_transform = glm.scale(only_direction)
+        else:
+            print("왜 나는 chlid가 없어요 ㅜㅜ",self.name)
         
     def calculate_joint_transform(self):
         if self.channels == None:
@@ -533,8 +560,8 @@ def parse_bvh_file(path):
                         channel_list.append(channel)
                     ## 필요한 정보(JOINT, OFFSET, CHANNEL)가 모두 모였으면 NODE 생성
                     if node_section and (offset != None) and (len(channels) != 0):
-                        #print(joint_name, color_degree) # ! for debug
-                        node = Node(parent_stack[-1],offset, glm.scale((.1,.1,.1)), glm.vec3(1,1,0),joint_name) #TODO scale 조정, 길이 넣는 걸로 해도 괜찮을 듯.
+                        # create a hirarchical model - Node(parent, link_transform_from_parent, color)
+                        node = Node(parent_stack[-1],offset, glm.vec3(1,1,0),joint_name) #TODO scale 조정, 길이 넣는 걸로 해도 괜찮을 듯.
                         #TODO 색깔설정 다시해주셈
                         #color_degree += 0.0625 # ! for debug
                         node.set_channels(channels) # channel 설정
@@ -547,7 +574,7 @@ def parse_bvh_file(path):
                 elif tokens[0] == '}':
                     if end_site_section:
                         end_site_section = False
-                        end_site_offset_list.append(offset)
+                        Node(parent_stack[-1],offset, glm.vec3(1,1,1), "END") #TODO end site
                     else:
                         del parent_stack[-1]
             #TODO        
@@ -667,7 +694,160 @@ def prepare_vao_grid():
 
     return VAO
 
+
+
 def prepare_vao_cube():
+    # prepare vertex data (in main memory)0
+    # 36 vertices for 12 triangles
+    vertices = glm.array(glm.float32,
+        # position      color
+        0 ,  1.0 ,  1 ,  1, 1, 1, # v0
+        1 ,  0.0 ,  1 ,  1, 1, 1, # v2
+        1 ,  1.0 ,  1 ,  1, 1, 1, # v1
+
+        0 ,  1.0 ,  1 ,  1, 1, 1, # v0
+        0 ,  0.0 ,  1 ,  1, 1, 1, # v3
+        1 ,  0.0 ,  1 ,  1, 1, 1, # v2
+
+        0 ,  1.0 , 0 ,  1, 1, 1, # v4
+        1 ,  1.0 , 0 ,  1, 1, 1, # v5
+        1 ,  0.0 , 0 ,  1, 1, 1, # v6
+
+        0 ,  1.0 , 0 ,  1, 1, 1, # v4
+        1 ,  0.0 , 0 ,  1, 1, 1, # v6
+        0 ,  0.0 , 0 ,  1, 1, 1, # v7
+
+        0 ,  1.0 ,  1 ,  1, 1, 1, # v0
+        1 ,  1.0 ,  1 ,  1, 1, 1, # v1
+        1 ,  1.0 , 0 ,  1, 1, 1, # v5
+
+        0 ,  1.0 ,  1 ,  1, 1, 1, # v0
+        1 ,  1.0 , 0 ,  1, 1, 1, # v5
+        0 ,  1.0 , 0 ,  1, 1, 1, # v4
+
+        0 ,  0.0 ,  1 ,  1, 1, 1, # v3
+        1 ,  0.0 , 0 ,  1, 1, 1, # v6
+        1 ,  0.0 ,  1 ,  1, 1, 1, # v2
+
+        0 ,  0.0 ,  1 ,  1, 1, 1, # v3
+        0 ,  0.0 , 0 ,  1, 1, 1, # v7
+        1 ,  0.0 , 0 ,  1, 1, 1, # v6
+
+        1 ,  1.0 ,  1 ,  1, 1, 1, # v1
+        1 ,  0.0 ,  1 ,  1, 1, 1, # v2
+        1 ,  0.0 , 0 ,  1, 1, 1, # v6
+
+        1 ,  1.0 ,  1 ,  1, 1, 1, # v1
+        1 ,  0.0 , 0 ,  1, 1, 1, # v6
+        1 ,  1.0 , 0 ,  1, 1, 1, # v5
+
+        0 ,  1.0 ,  1 ,  1, 1, 1, # v0
+        0 ,  0.0 , 0 ,  1, 1, 1, # v7
+        0 ,  0.0 ,  1 ,  1, 1, 1, # v3
+
+        0 ,  1.0 ,  1 ,  1, 1, 1, # v0
+        0 ,  1.0 , 0 ,  1, 1, 1, # v4
+        0 ,  0.0 , 0 ,   1, 1, 1, # v7
+)
+
+    # create and activate VAO (vertex array object)
+    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
+    glBindVertexArray(VAO)      # activate VAO
+
+    # create and activate VBO (vertex buffer object)
+    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
+    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
+
+    # copy vertex data to VBO
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
+
+    # configure vertex positions
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
+    glEnableVertexAttribArray(0)
+
+    # configure vertex colors
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
+    glEnableVertexAttribArray(1)
+
+    return VAO
+
+
+def prepare_vao_cube_y_1():
+    # prepare vertex data (in main memory)0
+    # 36 vertices for 12 triangles
+    vertices = glm.array(glm.float32,
+        # position      color
+        -0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v0
+        0.5 ,  0.0 ,  0.5 ,  1, 1, 1, # v2
+        0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v1
+
+        -0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v0
+        -0.5 ,  0.0 ,  0.5 ,  1, 1, 1, # v3
+        0.5 ,  0.0 ,  0.5 ,  1, 1, 1, # v2
+
+        -0.5 ,  1.0 , -0.5 ,  1, 1, 1, # v4
+        0.5 ,  1.0 , -0.5 ,  1, 1, 1, # v5
+        0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v6
+
+        -0.5 ,  1.0 , -0.5 ,  1, 1, 1, # v4
+        0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v6
+        -0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v7
+
+        -0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v0
+        0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v1
+        0.5 ,  1.0 , -0.5 ,  1, 1, 1, # v5
+
+        -0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v0
+        0.5 ,  1.0 , -0.5 ,  1, 1, 1, # v5
+        -0.5 ,  1.0 , -0.5 ,  1, 1, 1, # v4
+
+        -0.5 ,  0.0 ,  0.5 ,  1, 1, 1, # v3
+        0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v6
+        0.5 ,  0.0 ,  0.5 ,  1, 1, 1, # v2
+
+        -0.5 ,  0.0 ,  0.5 ,  1, 1, 1, # v3
+        -0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v7
+        0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v6
+
+        0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v1
+        0.5 ,  0.0 ,  0.5 ,  1, 1, 1, # v2
+        0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v6
+
+        0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v1
+        0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v6
+        0.5 ,  1.0 , -0.5 ,  1, 1, 1, # v5
+
+        -0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v0
+        -0.5 ,  0.0 , -0.5 ,  1, 1, 1, # v7
+        -0.5 ,  0.0 ,  0.5 ,  1, 1, 1, # v3
+
+        -0.5 ,  1.0 ,  0.5 ,  1, 1, 1, # v0
+        -0.5 ,  1.0 , -0.5 ,  1, 1, 1, # v4
+        -0.5 ,  0.0 , -0.5 ,   1, 1, 1, # v7
+)
+
+    # create and activate VAO (vertex array object)
+    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
+    glBindVertexArray(VAO)      # activate VAO
+
+    # create and activate VBO (vertex buffer object)
+    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
+    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
+
+    # copy vertex data to VBO
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
+
+    # configure vertex positions
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
+    glEnableVertexAttribArray(0)
+
+    # configure vertex colors
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
+    glEnableVertexAttribArray(1)
+
+    return VAO
+
+def prepare_vao_cube_05():
     # prepare vertex data (in main memory)
     # 36 vertices for 12 triangles
     vertices = glm.array(glm.float32,
@@ -744,11 +924,42 @@ def prepare_vao_cube():
 
 def prepare_vao_line():
     # prepare vertex data (in main memory)
-    # 36 vertices for 12 triangles
     vertices = glm.array(glm.float32,
         # position      color
-        -1 ,  0 ,  0 ,  1, 1, 1, # v0
-         1 ,  0 ,  0 ,  1, 1, 1, # v2
+         0 ,  0 ,  0 ,  0, 1, 1, # x
+         1 ,  0 ,  0 ,  0, 1, 1, # x
+         0 ,  0 ,  0 ,  0, 1, 1, # y
+         0 ,  1 ,  0 ,  0, 1, 1, # y
+         0 ,  0 ,  0 ,  0, 1, 1, # z
+         0 ,  0 ,  1 ,  0, 1, 1, # z
+    )
+
+    # create and activate VAO (vertex array object)
+    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
+    glBindVertexArray(VAO)      # activate VAO
+
+    # create and activate VBO (vertex buffer object)
+    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
+    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
+
+    # copy vertex data to VBO
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
+
+    # configure vertex positions
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
+    glEnableVertexAttribArray(0)
+
+    # configure vertex colors
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
+    glEnableVertexAttribArray(1)
+
+    return VAO
+
+def prepare_vao_line_with_offsets(offset1,offset2):
+    # prepare vertex data (in main memory)
+    vertices = glm.array(glm.float32,
+        offset1[0],offset1[1],offset1[2], 0,1,1,
+        offset2[0],offset2[1],offset2[2], 0,1,1,
     )
 
     # create and activate VAO (vertex array object)
@@ -783,12 +994,43 @@ def draw_grid(vao, MVP, unif_locs):
     glDrawArrays(GL_LINES, 0, 84)
     
 def draw_node_with_line(vao, node, VP, unif_locs):
-    M = node.get_global_transform() * node.get_shape_transform()
+    M = node.get_global_transform() * node.line_transform
     MVP = VP * M
-    #color = node.get_color()
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glBindVertexArray(vao)
-    glDrawArrays(GL_LINES, 0, 2)
+    glDrawArrays(GL_LINES, 0, 6)
+
+    # aux line
+    if len(node.children) > 2:
+        for child in node.children:
+            vao_aux_line = prepare_vao_line_with_offsets(node.offset,child.offset)
+            M = node.get_global_transform() * node.aux_line_transform
+            MVP = VP * M
+            glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+            glBindVertexArray(vao_aux_line)
+            glDrawArrays(GL_LINES, 0, 2)
+    
+# def draw_node_with_line_finish(node, VP, unif_locs):
+#     if len(node.children) > 2:
+#         for child in node.children:
+#             vao_aux_line = prepare_vao_line_with_offsets(node.offset,child.offset)
+#             M = node.get_global_transform() * node.line_transform
+#             MVP = VP * M
+#             color = node.get_color()
+#             glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+#             glBindVertexArray(vao_aux_line)
+#             glDrawArrays(GL_LINES, 0, 2)
+            
+# def draw_node_with_line2(node, VP, unif_locs):
+#     if len(node.children) > 2:
+#         for child in node.children:
+#             vao = prepare_vao_line_with_offsets(node.offset,child.offset)
+#             M = node.get_global_transform() * node.line_transform
+#             MVP = VP * M
+#             color = node.get_color()
+#             glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+#             glBindVertexArray(vao)
+#             glDrawArrays(GL_LINES, 0, 2)
 
 def draw_node_with_cube(vao, node, VP, unif_locs):
     M = node.get_global_transform() * node.get_shape_transform()
@@ -810,7 +1052,7 @@ def main():
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE) # for macOS
 
     # create a window and OpenGL context
-    window = glfwCreateWindow(800, 800, 'project2 2019019043 박종윤', None, None)
+    window = glfwCreateWindow(800, 800, 'project3 2019019043 박종윤', None, None)
     if not window:
         glfwTerminate()
         return
@@ -841,13 +1083,11 @@ def main():
     vao_frame = prepare_vao_frame()
     vao_grid = prepare_vao_grid()
     vao_cube = prepare_vao_cube()
-
-    # create a hirarchical model - Node(parent, link_transform_from_parent, shape_transform, color)
-    # hips =  Node(None,              glm.mat4(),                      glm.scale((1.,1.,1.)),      glm.vec3(0,0,1), 'test')
-    # spine = Node(hips,              glm.translate(glm.vec3(1,1,1)),  glm.scale((1.,1.,1.)),      glm.vec3(1,0,0))
+    vao_line = prepare_vao_line()
   
     global g_node_list, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max
     bvh_path = os.path.join(fileDirectory,"Project3-bvh","01_01.bvh")
+    bvh_path = os.path.join(fileDirectory,"Project3-bvh","sample-spin.bvh")
     bvh_path = os.path.join(fileDirectory,"Project3-bvh","sample-walk.bvh")
     g_node_list, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
     g_motion_data_line_num = 0
@@ -928,8 +1168,17 @@ def main():
 
             ## draw nodes
             for node in g_node_list:
-                draw_node_with_cube(vao_cube, node, P*V, unif_locs_lighting)
+                if g_rendering_mode_toggle == 0:
+                    # line
+                    glUseProgram(shader_color)
+                    draw_node_with_line(vao_line, node, P*V, unif_locs_color)
+                    #draw_node_with_line2( node, P*V, unif_locs_color)
             
+                elif g_rendering_mode_toggle == 1:
+                    glUseProgram(shader_lighting)
+                    glUniform3f(unif_locs_lighting['view_pos'], cam_pos.x, cam_pos.y, cam_pos.z)
+                    draw_node_with_cube(vao_cube, node, P*V, unif_locs_lighting)
+                
             if g_animate_toggle:
                 g_motion_data_line_num += 1
                 if (g_motion_data_line_num == g_motion_data_line_max):
