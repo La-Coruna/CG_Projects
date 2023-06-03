@@ -233,9 +233,9 @@ class Node:
             is_exist_right = False
             non_direction_child = []
             for child in self.children:
-                if child.name[0].upper() == 'LEFT':
+                if child.name[0:4].upper() == "LEFT":
                     is_exist_left = True
-                elif child.name[0].upper() == 'RIGHT':
+                elif child.name[0:5].upper() == "RIGHT":
                     is_exist_right = True
                 else:
                     non_direction_child.append(child)
@@ -249,15 +249,34 @@ class Node:
             
             angle_between_polygon_and_direction = calculate_angle_between_vectors(child_to_shape_with.offset,glm.vec3(0,1,0))
             polygon_rotation = glm.rotate(angle_between_polygon_and_direction,glm.cross((0,1,0),child_to_shape_with.offset)) if angle_between_polygon_and_direction != .0 else glm.mat4()
+            if angle_between_polygon_and_direction == .0:
+                polygon_rotation = glm.mat4()
+            elif angle_between_polygon_and_direction == np.pi:
+                polygon_rotation = glm.scale((1,-1,1))
+            else:
+                polygon_rotation = glm.rotate(angle_between_polygon_and_direction,glm.cross((0,1,0),child_to_shape_with.offset))
             # polygon can be line or cube
             shape_magnitude = glm.length(child_to_shape_with.offset)
             cube_shape = glm.vec3(.05,shape_magnitude,.05)
-            line_shape = glm.vec3(0.0,shape_magnitude,0.0)
+            cube_shape = glm.vec3(.1,shape_magnitude,.1)##@@@@@@@@@@@@@@@@@@@@@@@@@
+            cube_shape = glm.vec3(.1,shape_magnitude,.1)
+            line_shape = glm.vec3(0.1,shape_magnitude,0.1)
+
+            if(self.name == "RightUpLeg"):
+                print("RightUpLeg:", cube_shape)
+                print("RightUpLeg:", polygon_rotation)
+                print("RightUpLeg:", angle_between_polygon_and_direction)
+                print("RightUpLeg cross:", glm.cross((0,1,0),child_to_shape_with.offset))
+                
 
             self.shape_transform = polygon_rotation * glm.scale(cube_shape)         
             self.line_transform =  polygon_rotation * glm.scale(line_shape)
+        # node의 child가 없는 경우, JOINT가 END SITE로 끝나지 않은 경우이다.
         else:
-            print("error: ",self.name," doesn't have a child offset")
+            print("error: the JOINT[",self.name,"] doesn't end with 'End Site'")
+            self.shape_transform = glm.scale((0,0,0))         
+            self.line_transform =  glm.scale((0,0,0))
+            
         
     def calculate_joint_transform(self):
         if self.channels == None:
@@ -577,9 +596,7 @@ def parse_bvh_file(path):
                     # 모션 데이터 추출
                     motion_data.append([float(token) for token in tokens])
 
-    #print("node_list: ", node_list) # ! for debug
-    # 추출한 관절 정보와 모션 데이터 반환
-    #print(len(channel_list) == len(motion_data[1])  )
+    
     for node in node_list[1:]:
         node.calculate_shape_transform()
     
@@ -598,7 +615,6 @@ def drop_callback(window, paths):
     update_node_list_joint_transform(g_node_list)
 
     # 파싱 결과 출력
-    print("g_node_list: ", g_node_list) # ! for debug
     print("File name: ", paths[0])
     print("Number of frames: ", frame_count)
     print("FPS: ", frame_time)
@@ -913,9 +929,17 @@ def prepare_vao_cube_05():
 def prepare_vao_line():
     # prepare vertex data (in main memory)
     vertices = glm.array(glm.float32,
+#TODO 색깔 , y축만 나오도록                         
         # position      color
+         #x
+         0 ,  0 ,  0 ,  1, 0, 0,
+         1 ,  0 ,  0 ,  1, 0, 0,
+         #y
          0 ,  0 ,  0 ,  1, 1, 0,
          0 ,  1 ,  0 ,  1, 1, 0,
+         #z
+         0 ,  0 ,  0 ,  0, 0, 1,
+         0 ,  0 ,  1 ,  0, 0, 1,
     )
 
     # create and activate VAO (vertex array object)
@@ -943,8 +967,10 @@ def prepare_vao_line_with_offsets(offset1,offset2):
     # prepare vertex data (in main memory)
     vertices = glm.array(glm.float32,
         # position      color
-        offset1[0],offset1[1],offset1[2], 1, 1, 0,
-        offset2[0],offset2[1],offset2[2], 1, 1, 0,
+        offset1[0],offset1[1],offset1[2], 0, 1, 1,
+        offset2[0],offset2[1],offset2[2], 0, 1, 1,
+        # offset1[0],offset1[1],offset1[2], 1, 1, 0,
+        # offset2[0],offset2[1],offset2[2], 1, 1, 0,
     )
 
     # create and activate VAO (vertex array object)
@@ -983,17 +1009,21 @@ def draw_node_with_line(vao, node, VP, unif_locs):
     MVP = VP * M
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glBindVertexArray(vao)
-    glDrawArrays(GL_LINES, 0, 2)
+    glDrawArrays(GL_LINES, 0, 6)
 
     # aux line
     if len(node.children) > 2:
         for child in node.children:
-            vao_aux_line = prepare_vao_line_with_offsets(node.offset,child.offset)
-            M = node.get_global_transform()
-            MVP = VP * M
-            glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
-            glBindVertexArray(vao_aux_line)
-            glDrawArrays(GL_LINES, 0, 2)
+            #if (child.name[0:5].upper() == "RIGHT" or child.name[0:4].upper() == "LEFT") and not (child.offset in [x.offset for x in node.children if x.name != child.name]):
+            #if (child.name[0:5].upper() == "RIGHT" or child.name[0:4].upper() == "LEFT"):
+                #print(child.name, child.offset in [x.offset for x in node.children if x.name != child.name])
+            if  not (child.offset in [x.offset for x in node.children if x.name != child.name]):
+                vao_aux_line = prepare_vao_line_with_offsets(node.offset,child.offset)
+                M = node.get_global_transform()
+                MVP = VP * M
+                glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+                glBindVertexArray(vao_aux_line)
+                glDrawArrays(GL_LINES, 0, 2)
 
 def draw_node_with_cube(vao, node, VP, unif_locs):
     M = node.get_global_transform() * node.get_shape_transform()
