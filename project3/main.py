@@ -41,11 +41,6 @@ g_P_toggle = True
 # for mode ( 0: single mesh rendering mode, 1: animating hierarchical model rendering mode )
 g_rendering_mode_toggle = 1
 
-#TODO 나중에 삭제해도 됨
-# obj path
-absolutepath = os.path.abspath(__file__)
-fileDirectory = os.path.dirname(absolutepath)
-
 # bvh info
 g_node_list = None
 g_max_offset_length = 1
@@ -54,11 +49,9 @@ g_channel_list = None
 g_motion_data = None
 g_motion_data_line_num = 0
 g_motion_data_line_max = 0
-
+g_frame_time = 1
 g_animate_toggle = False
-
-# ! for debug
-g_debug_1 = 0
+g_aux_toggle = True
 
 g_vertex_shader_src_lighting = '''
 #version 330 core
@@ -249,9 +242,8 @@ class Node:
                    
         if child_to_shape_with != None:
             # cube의 굵기로 제일 작은 노드의 크기로 함
-            thickness = g_min_offset_length / 1
-            thickness = g_max_offset_length / 15
-            print(thickness, glm.length(child_to_shape_with.offset))
+            # thickness = g_min_offset_length / 1
+            thickness = g_max_offset_length / 15 # 최대 offset의 1/15로 두께 설정
             angle_between_polygon_and_direction = calculate_angle_between_vectors(child_to_shape_with.offset,glm.vec3(0,1,0))
             polygon_rotation = glm.rotate(angle_between_polygon_and_direction,glm.cross((0,1,0),child_to_shape_with.offset)) if angle_between_polygon_and_direction != .0 else glm.mat4()
             if angle_between_polygon_and_direction == .0:
@@ -263,17 +255,8 @@ class Node:
             # polygon can be line or cube
             shape_magnitude = glm.length(child_to_shape_with.offset)
             cube_shape = glm.vec3(.05,shape_magnitude,.05)
-            cube_shape = glm.vec3(.1,shape_magnitude,.1)##@@@@@@@@@@@@@@@@@@@@@@@@@
-            cube_shape = glm.vec3(.1,shape_magnitude,.1)##@@@@@@@@@@@@@@@@@@@@@@@@@
             cube_shape = glm.vec3(thickness,shape_magnitude,thickness)
             line_shape = glm.vec3(0.1,shape_magnitude,0.1)
-
-            if(self.name == "RightUpLeg"):
-                print("RightUpLeg:", cube_shape)
-                print("RightUpLeg:", polygon_rotation)
-                print("RightUpLeg:", angle_between_polygon_and_direction)
-                print("RightUpLeg cross:", glm.cross((0,1,0),child_to_shape_with.offset))
-                
 
             self.shape_transform = polygon_rotation * glm.scale(cube_shape)         
             self.line_transform =  polygon_rotation * glm.scale(line_shape)
@@ -405,8 +388,7 @@ def key_callback(window, key, scancode, action, mods):
     if key==GLFW_KEY_ESCAPE and action==GLFW_PRESS:
         glfwSetWindowShouldClose(window, GLFW_TRUE)
     else:
-        global g_debug_1 # ! for debug
-        global g_P_toggle, g_rendering_mode_toggle, g_animate_toggle
+        global g_P_toggle, g_rendering_mode_toggle, g_animate_toggle, g_aux_toggle
         if action==GLFW_PRESS or action==GLFW_REPEAT:
             if key==GLFW_KEY_V:
                 g_P_toggle = not g_P_toggle
@@ -415,14 +397,10 @@ def key_callback(window, key, scancode, action, mods):
                 g_rendering_mode_toggle = 0
             elif key==GLFW_KEY_2:
                 g_rendering_mode_toggle = 1
+            elif key==GLFW_KEY_3:
+                g_aux_toggle = not g_aux_toggle
             elif key==GLFW_KEY_SPACE:
                 g_animate_toggle = not g_animate_toggle
-            elif key==GLFW_KEY_LEFT:
-                g_debug_1 -= 1
-                print("g_debug_1: ", g_debug_1)
-            elif key==GLFW_KEY_RIGHT:
-                g_debug_1 += 1
-                print("g_debug_1: ", g_debug_1)
             
 
 
@@ -525,11 +503,10 @@ def parse_bvh_file(path):
 
         # variable declaration
         joint_name_list = []
-        joint_name = None # ! for debug
+        joint_name = None
         offset = None
         channels = []
 
-        # 모션 데이터를 저장할 변수
         motion_data = []
 
         hierarchy_section = False
@@ -540,8 +517,6 @@ def parse_bvh_file(path):
         
         parent_stack = [None]
         
-        # ! for debug
-        #color_degree = 0.0625
 
         for line in lines:
             # 토큰 분할
@@ -564,26 +539,22 @@ def parse_bvh_file(path):
                     end_site_section = True
                 ## OFFSET
                 elif tokens[0] == 'OFFSET':
-                    #offset = [float(tokens[1]),float(tokens[2]),float(tokens[3])]
                     offset = glm.vec3(float(tokens[1]),float(tokens[2]),float(tokens[3]))
                     offset_length = glm.length(offset)
                     if max_offset_length < offset_length :
                         max_offset_length = offset_length
-                        print("@@: ",max_offset_length)
-                    #TODO 다음에 나오는 offset을 전에 node의 길이로
+                    # 참고로 다음 노드에 나오는 offset을 전에 node의 길이로 설정하게 됨.
                 ## CHANNEL
                 elif tokens[0] == 'CHANNELS':
                     for channel_tokens in tokens[2:]:
                         channel = Channel(channel_tokens[0],channel_tokens[1:])
-                        channel.set_value(0)# TODO 처음 시작은 motion data의 1로.
+                        channel.set_value(0) # channel value 초기화. 후에 업데이트 될 예정.
                         channels.append(channel)
                         channel_list.append(channel)
                     ## 필요한 정보(JOINT, OFFSET, CHANNEL)가 모두 모였으면 NODE 생성
                     if node_section and (offset != None) and (len(channels) != 0):
-                        # create a hirarchical model - Node(parent, link_transform_from_parent, color,joint_name)
-                        node = Node(parent_stack[-1],offset, glm.vec3(1, 1, 0),joint_name) #TODO scale 조정, 길이 넣는 걸로 해도 괜찮을 듯.
-                        #TODO 색깔설정 다시해주셈
-                        #color_degree += 0.0625 # ! for debug
+                        # create a hierarchical model - Node(parent, link_transform_from_parent, color,joint_name)
+                        node = Node(parent_stack[-1],offset, glm.vec3(1, 1, 0),joint_name)
                         node.set_channels(channels) # channel 설정
                         node_list.append(node)
                         parent_stack.append(node)
@@ -594,7 +565,7 @@ def parse_bvh_file(path):
                 elif tokens[0] == '}':
                     if end_site_section:
                         end_site_section = False
-                        Node(parent_stack[-1],offset, glm.vec3(1,1,1), "END") #TODO end site
+                        Node(parent_stack[-1],offset, glm.vec3(1,1,1), "END") # end site
                         # min_offset_length 를 구함. 노드를 그릴 cube의 두께를 위해서
                         if offset_length != 0:
                             if min_offset_length == None:
@@ -603,10 +574,9 @@ def parse_bvh_file(path):
                                 min_offset_length = offset_length
                     else:
                         del parent_stack[-1]
-            #TODO        
             elif motion_section:
                 if tokens[0] == 'FRAMES:':
-                    # 프레임 수 추출
+                    # 프레임 수
                     frame_count = int(tokens[1])
                 elif tokens[0] == 'FRAME' and tokens[1] == 'TIME:':
                     # 프레임 간 시간 간격 추출
@@ -618,30 +588,28 @@ def parse_bvh_file(path):
     if min_offset_length == None:
         min_offset_length = 0.1
         
-    print("################max_offset_length: ",max_offset_length)
-    
     return node_list[1:], max_offset_length, min_offset_length, channel_list, joint_name_list, frame_count, frame_time, motion_data
 
 # load bvh file
 def drop_callback(window, paths):
     bvh_path=paths[0]
-    global g_node_list,g_max_offset_length, g_min_offset_length, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max, g_animate_toggle
-    g_node_list, g_max_offset_length, g_min_offset_length, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
+    global g_node_list,g_max_offset_length, g_min_offset_length, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max, g_animate_toggle, g_frame_time
+    g_node_list, g_max_offset_length, g_min_offset_length, g_channel_list, joint_name_list, frame_count, g_frame_time, g_motion_data = parse_bvh_file(bvh_path)
     for node in g_node_list:
         node.calculate_shape_transform()
     g_motion_data_line_num = 0
     g_motion_data_line_max = len(g_motion_data)
     g_animate_toggle = False
     
-    update_channel_list_value(g_channel_list, g_motion_data, 0)
+    #update_channel_list_value(g_channel_list, g_motion_data, 0)
     update_node_list_joint_transform(g_node_list)
 
     # 파싱 결과 출력
-    print("File name: ", paths[0])
-    print("Number of frames: ", frame_count)
-    print("FPS: ", frame_time)
-    print("Number of joints: ", len(joint_name_list))
-    print("List of all joint names: ", joint_name_list)
+    print("File name:", os.path.basename(paths[0]))
+    print("Number of frames:", frame_count)
+    print("FPS:", 1/g_frame_time)
+    print("Number of joints:", len(joint_name_list))
+    print("List of all joint names:", joint_name_list)
 
 def prepare_vao_frame():
     # prepare vertex data (in main memory)
@@ -720,84 +688,6 @@ def prepare_vao_grid():
 
     return VAO
 
-
-
-def prepare_vao_cube_all_1():
-    # prepare vertex data (in main memory)0
-    # 36 vertices for 12 triangles
-    vertices = glm.array(glm.float32,
-        # position      color
-        0 ,  1.0 ,  1 ,   0, 0, 1, # v0
-        1 ,  0.0 ,  1 ,   0, 0, 1, # v2
-        1 ,  1.0 ,  1 ,   0, 0, 1, # v1
-
-        0 ,  1.0 ,  1 ,   0, 0, 1, # v0
-        0 ,  0.0 ,  1 ,   0, 0, 1, # v3
-        1 ,  0.0 ,  1 ,   0, 0, 1, # v2
-
-        0 ,  1.0 , 0 ,   0, 0,-1, # v4
-        1 ,  1.0 , 0 ,   0, 0,-1, # v5
-        1 ,  0.0 , 0 ,   0, 0,-1, # v6
-
-        0 ,  1.0 , 0 ,   0, 0,-1, # v4
-        1 ,  0.0 , 0 ,   0, 0,-1, # v6
-        0 ,  0.0 , 0 ,   0, 0,-1, # v7
-
-        0 ,  1.0 ,  1 ,   0, 1, 0, # v0
-        1 ,  1.0 ,  1 ,   0, 1, 0, # v1
-        1 ,  1.0 , 0 ,   0, 1, 0, # v5
-
-        0 ,  1.0 ,  1 ,   0, 1, 0, # v0
-        1 ,  1.0 , 0 ,   0, 1, 0, # v5
-        0 ,  1.0 , 0 ,   0, 1, 0, # v4
-
-        0 ,  0.0 ,  1 ,   0,-1, 0, # v3
-        1 ,  0.0 , 0 ,   0,-1, 0, # v6
-        1 ,  0.0 ,  1 ,   0,-1, 0, # v2
-
-        0 ,  0.0 ,  1 ,   0,-1, 0, # v3
-        0 ,  0.0 , 0 ,   0,-1, 0, # v7
-        1 ,  0.0 , 0 ,   0,-1, 0, # v6
-
-        1 ,  1.0 ,  1 ,   1, 0, 0, # v1
-        1 ,  0.0 ,  1 ,   1, 0, 0, # v2
-        1 ,  0.0 , 0 ,   1, 0, 0, # v6
-
-        1 ,  1.0 ,  1 ,   1, 0, 0, # v1
-        1 ,  0.0 , 0 ,   1, 0, 0, # v6
-        1 ,  1.0 , 0 ,   1, 0, 0, # v5
-
-        0 ,  1.0 ,  1 ,  -1, 0, 0, # v0
-        0 ,  0.0 , 0 ,  -1, 0, 0, # v7
-        0 ,  0.0 ,  1 ,  -1, 0, 0, # v3
-
-        0 ,  1.0 ,  1 ,  -1, 0, 0, # v0
-        0 ,  1.0 , 0 ,  -1, 0, 0, # v4
-        0 ,  0.0 , 0 ,   -1, 0, 0, # v7
-)
-
-    # create and activate VAO (vertex array object)
-    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
-    glBindVertexArray(VAO)      # activate VAO
-
-    # create and activate VBO (vertex buffer object)
-    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
-    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
-
-    # copy vertex data to VBO
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
-
-    # configure vertex positions
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
-    glEnableVertexAttribArray(0)
-
-    # configure vertex colors
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
-    glEnableVertexAttribArray(1)
-
-    return VAO
-
-
 def prepare_vao_cube():
     # prepare vertex data (in main memory)0
     # 36 vertices for 12 triangles
@@ -873,95 +763,13 @@ def prepare_vao_cube():
 
     return VAO
 
-def prepare_vao_cube_05():
-    # prepare vertex data (in main memory)
-    # 36 vertices for 12 triangles
-    vertices = glm.array(glm.float32,
-        # position      color
-        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
-         0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v2
-         0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v1
-
-        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
-        -0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v3
-         0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v2
-
-        -0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v4
-         0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v5
-         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
-
-        -0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v4
-         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
-        -0.5 , -0.5 , -0.5 ,  1, 1, 1, # v7
-
-        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
-         0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v1
-         0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v5
-
-        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
-         0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v5
-        -0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v4
- 
-        -0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v3
-         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
-         0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v2
-
-        -0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v3
-        -0.5 , -0.5 , -0.5 ,  1, 1, 1, # v7
-         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
-
-         0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v1
-         0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v2
-         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
-
-         0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v1
-         0.5 , -0.5 , -0.5 ,  1, 1, 1, # v6
-         0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v5
-
-        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
-        -0.5 , -0.5 , -0.5 ,  1, 1, 1, # v7
-        -0.5 , -0.5 ,  0.5 ,  1, 1, 1, # v3
-
-        -0.5 ,  0.5 ,  0.5 ,  1, 1, 1, # v0
-        -0.5 ,  0.5 , -0.5 ,  1, 1, 1, # v4
-        -0.5 , -0.5 , -0.5 ,  1, 1, 1, # v7
-    )
-
-    # create and activate VAO (vertex array object)
-    VAO = glGenVertexArrays(1)  # create a vertex array object ID and store it to VAO variable
-    glBindVertexArray(VAO)      # activate VAO
-
-    # create and activate VBO (vertex buffer object)
-    VBO = glGenBuffers(1)   # create a buffer object ID and store it to VBO variable
-    glBindBuffer(GL_ARRAY_BUFFER, VBO)  # activate VBO as a vertex buffer object
-
-    # copy vertex data to VBO
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices.ptr, GL_STATIC_DRAW) # allocate GPU memory for and copy vertex data to the currently bound vertex buffer
-
-    # configure vertex positions
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None)
-    glEnableVertexAttribArray(0)
-
-    # configure vertex colors
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), ctypes.c_void_p(3*glm.sizeof(glm.float32)))
-    glEnableVertexAttribArray(1)
-
-    return VAO
-
 def prepare_vao_line():
     # prepare vertex data (in main memory)
     vertices = glm.array(glm.float32,
-#TODO 색깔 , y축만 나오도록                         
         # position      color
-         #x
-         0 ,  0 ,  0 ,  1, 0, 0,
-         1 ,  0 ,  0 ,  1, 0, 0,
          #y
          0 ,  0 ,  0 ,  1, 1, 0,
          0 ,  1 ,  0 ,  1, 1, 0,
-         #z
-         0 ,  0 ,  0 ,  0, 0, 1,
-         0 ,  0 ,  1 ,  0, 0, 1,
     )
 
     # create and activate VAO (vertex array object)
@@ -989,10 +797,8 @@ def prepare_vao_line_with_offsets(offset1,offset2):
     # prepare vertex data (in main memory)
     vertices = glm.array(glm.float32,
         # position      color
-        offset1[0],offset1[1],offset1[2], 0, 1, 1,
-        offset2[0],offset2[1],offset2[2], 0, 1, 1,
-        # offset1[0],offset1[1],offset1[2], 1, 1, 0,
-        # offset2[0],offset2[1],offset2[2], 1, 1, 0,
+        offset1[0],offset1[1],offset1[2], 1, 1, 0,
+        offset2[0],offset2[1],offset2[2], 1, 1, 0,
     )
 
     # create and activate VAO (vertex array object)
@@ -1032,18 +838,18 @@ def draw_node_with_line(vao, node, VP, unif_locs):
     MVP = VP * M
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glBindVertexArray(vao)
-    glDrawArrays(GL_LINES, 0, 6)
+    glDrawArrays(GL_LINES, 0, 2)
 
     # aux line
-    # if len(node.children) > 2:
-    #     for child in node.children:
-    #         if  not (child.offset in [x.offset for x in node.children if x.name != child.name]):
-    #             vao_aux_line = prepare_vao_line_with_offsets(node.offset,child.offset)
-    #             M = retouch_scale_for_huge_model * node.get_global_transform()
-    #             MVP = VP * M
-    #             glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
-    #             glBindVertexArray(vao_aux_line)
-    #             glDrawArrays(GL_LINES, 0, 2)
+    if len(node.children) > 2 and g_aux_toggle:
+        for child in node.children:
+            if  not (child.offset in [x.offset for x in node.children if x.name != child.name]):
+                vao_aux_line = prepare_vao_line_with_offsets(node.offset,child.offset)
+                M = retouch_scale_for_huge_model * node.get_global_transform()
+                MVP = VP * M
+                glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+                glBindVertexArray(vao_aux_line)
+                glDrawArrays(GL_LINES, 0, 2)
 
 def draw_node_with_cube(vao, node, VP, unif_locs):
     retouch_scale_for_huge_model = glm.scale((1/g_max_offset_length, 1/g_max_offset_length,1/g_max_offset_length))
@@ -1099,39 +905,6 @@ def main():
     vao_cube = prepare_vao_cube()
     vao_line = prepare_vao_line()
   
-    #TODO 처음에 아무것도 안 뜨게.
-    global g_node_list, g_max_offset_length, g_min_offset_length, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max
-    bvh_path = os.path.join(fileDirectory,"Project3-bvh","01_01.bvh")
-    bvh_path = os.path.join(fileDirectory,"Project3-bvh","sample-spin.bvh")
-    bvh_path = os.path.join(fileDirectory,"Project3-bvh","sample-walk.bvh")
-    bvh_path = os.path.join(fileDirectory,"Project3-bvh","test.bvh")
-    g_node_list, g_max_offset_length, g_min_offset_length, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
-    for node in g_node_list:
-        node.calculate_shape_transform()
-    g_motion_data_line_num = 0
-    g_motion_data_line_max = len(g_motion_data)
-
-    # 파싱 결과 출력
-    # print("g_node_list: ", g_node_list) # ! for debug
-    # print("File name: ", path)
-    # print("Number of frames: ", frame_count)
-    # print("FPS: ", frame_time)
-    print("Number of joints: ", len(joint_name_list))
-    print("List of all joint names: ", joint_name_list)
-    #print("motion_data: ", g_motion_data)
-
-    update_channel_list_value(g_channel_list, g_motion_data, 0)
-    update_node_list_joint_transform(g_node_list)
-    
-    # for node in g_node_list:
-    #     #print(node.name, node.color)
-    #     print(node.name, "->", node.parent.name if node.parent != None else "None")
-    #     print(node.link_transform_from_parent)
-    #     for channel in node.channels:
-    #         print(channel.toString())        
-        
-    # for channel in g_channel_list:
-    #     print(channel.toString())
 
     # loop until the user closes the window
     while not glfwWindowShouldClose(window):
@@ -1176,35 +949,33 @@ def main():
         glUseProgram(shader_lighting)
         glUniform3f(unif_locs_lighting['view_pos'], cam_pos.x, cam_pos.y, cam_pos.z)
         
-        #TODO 시작
+        ## drawing skeleton
         if g_node_list != None:
-            ## set local transformations of each node
-            #TODO motion data를 바탕으로 반복문을 돌며 joint 수정.
-
-            ## recursively update global transformations of all nodes
+            # recursively update global transformations of all nodes
             g_node_list[0].update_tree_global_transform()
 
-            ## draw nodes
+            # draw nodes
             for node in g_node_list:
+                # drawing with line
                 if g_rendering_mode_toggle == 0:
-                    # line
                     glUseProgram(shader_color)
                     draw_node_with_line(vao_line, node, P*V, unif_locs_color)
-                    #draw_node_with_line2( node, P*V, unif_locs_color)
             
+                # drawing with cube
                 elif g_rendering_mode_toggle == 1:
                     glUseProgram(shader_lighting)
                     glUniform3f(unif_locs_lighting['view_pos'], cam_pos.x, cam_pos.y, cam_pos.z)
                     draw_node_with_cube(vao_cube, node, P*V, unif_locs_lighting)
-                
+            
+            # animate if it needs    
             if g_animate_toggle:
+                global g_motion_data_line_num
                 g_motion_data_line_num += 1
                 if (g_motion_data_line_num == g_motion_data_line_max):
                     g_motion_data_line_num = 0
                 update_channel_list_value(g_channel_list, g_motion_data, g_motion_data_line_num)
                 update_node_list_joint_transform(g_node_list)
-                time.sleep(frame_time)
-        #TODO 끝
+                time.sleep(g_frame_time)
         
         # swap front and back buffers
         glfwSwapBuffers(window)
