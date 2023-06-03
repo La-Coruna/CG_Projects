@@ -48,6 +48,8 @@ fileDirectory = os.path.dirname(absolutepath)
 
 # bvh info
 g_node_list = None
+g_max_offset_length = 1
+g_min_offset_length = 0.05
 g_channel_list = None
 g_motion_data = None
 g_motion_data_line_num = 0
@@ -246,7 +248,10 @@ class Node:
                 child_to_shape_with = self.children[0]      
                    
         if child_to_shape_with != None:
-            
+            # cube의 굵기로 제일 작은 노드의 크기로 함
+            thickness = g_min_offset_length / 1
+            thickness = g_max_offset_length / 15
+            print(thickness, glm.length(child_to_shape_with.offset))
             angle_between_polygon_and_direction = calculate_angle_between_vectors(child_to_shape_with.offset,glm.vec3(0,1,0))
             polygon_rotation = glm.rotate(angle_between_polygon_and_direction,glm.cross((0,1,0),child_to_shape_with.offset)) if angle_between_polygon_and_direction != .0 else glm.mat4()
             if angle_between_polygon_and_direction == .0:
@@ -259,7 +264,8 @@ class Node:
             shape_magnitude = glm.length(child_to_shape_with.offset)
             cube_shape = glm.vec3(.05,shape_magnitude,.05)
             cube_shape = glm.vec3(.1,shape_magnitude,.1)##@@@@@@@@@@@@@@@@@@@@@@@@@
-            cube_shape = glm.vec3(.1,shape_magnitude,.1)
+            cube_shape = glm.vec3(.1,shape_magnitude,.1)##@@@@@@@@@@@@@@@@@@@@@@@@@
+            cube_shape = glm.vec3(thickness,shape_magnitude,thickness)
             line_shape = glm.vec3(0.1,shape_magnitude,0.1)
 
             if(self.name == "RightUpLeg"):
@@ -403,6 +409,7 @@ def key_callback(window, key, scancode, action, mods):
         global g_P_toggle, g_rendering_mode_toggle, g_animate_toggle
         if action==GLFW_PRESS or action==GLFW_REPEAT:
             if key==GLFW_KEY_V:
+                g_P_toggle = not g_P_toggle
                 update_projection_matrix()
             elif key==GLFW_KEY_1:
                 g_rendering_mode_toggle = 0
@@ -510,7 +517,9 @@ def scroll_callback(window, xoffset, yoffset):
 def parse_bvh_file(path):
     node_list = [None]
     channel_list = []
-    end_site_offset_list = []
+    max_offset_length = 1
+    min_offset_length = None
+
     with open(path, 'r') as file:
         lines = file.readlines()
 
@@ -557,6 +566,10 @@ def parse_bvh_file(path):
                 elif tokens[0] == 'OFFSET':
                     #offset = [float(tokens[1]),float(tokens[2]),float(tokens[3])]
                     offset = glm.vec3(float(tokens[1]),float(tokens[2]),float(tokens[3]))
+                    offset_length = glm.length(offset)
+                    if max_offset_length < offset_length :
+                        max_offset_length = offset_length
+                        print("@@: ",max_offset_length)
                     #TODO 다음에 나오는 offset을 전에 node의 길이로
                 ## CHANNEL
                 elif tokens[0] == 'CHANNELS':
@@ -567,7 +580,7 @@ def parse_bvh_file(path):
                         channel_list.append(channel)
                     ## 필요한 정보(JOINT, OFFSET, CHANNEL)가 모두 모였으면 NODE 생성
                     if node_section and (offset != None) and (len(channels) != 0):
-                        # create a hirarchical model - Node(parent, link_transform_from_parent, color)
+                        # create a hirarchical model - Node(parent, link_transform_from_parent, color,joint_name)
                         node = Node(parent_stack[-1],offset, glm.vec3(1, 1, 0),joint_name) #TODO scale 조정, 길이 넣는 걸로 해도 괜찮을 듯.
                         #TODO 색깔설정 다시해주셈
                         #color_degree += 0.0625 # ! for debug
@@ -582,6 +595,12 @@ def parse_bvh_file(path):
                     if end_site_section:
                         end_site_section = False
                         Node(parent_stack[-1],offset, glm.vec3(1,1,1), "END") #TODO end site
+                        # min_offset_length 를 구함. 노드를 그릴 cube의 두께를 위해서
+                        if offset_length != 0:
+                            if min_offset_length == None:
+                                min_offset_length = offset_length
+                            elif min_offset_length > offset_length:
+                                min_offset_length = offset_length
                     else:
                         del parent_stack[-1]
             #TODO        
@@ -596,17 +615,20 @@ def parse_bvh_file(path):
                     # 모션 데이터 추출
                     motion_data.append([float(token) for token in tokens])
 
+    if min_offset_length == None:
+        min_offset_length = 0.1
+        
+    print("################max_offset_length: ",max_offset_length)
     
-    for node in node_list[1:]:
-        node.calculate_shape_transform()
-    
-    return node_list[1:], channel_list, joint_name_list, frame_count, frame_time, motion_data
+    return node_list[1:], max_offset_length, min_offset_length, channel_list, joint_name_list, frame_count, frame_time, motion_data
 
 # load bvh file
 def drop_callback(window, paths):
     bvh_path=paths[0]
-    global g_node_list, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max, g_animate_toggle
-    g_node_list, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
+    global g_node_list,g_max_offset_length, g_min_offset_length, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max, g_animate_toggle
+    g_node_list, g_max_offset_length, g_min_offset_length, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
+    for node in g_node_list:
+        node.calculate_shape_transform()
     g_motion_data_line_num = 0
     g_motion_data_line_max = len(g_motion_data)
     g_animate_toggle = False
@@ -1005,28 +1027,27 @@ def draw_grid(vao, MVP, unif_locs):
     glDrawArrays(GL_LINES, 0, 84)
     
 def draw_node_with_line(vao, node, VP, unif_locs):
-    M = node.get_global_transform() * node.line_transform
+    retouch_scale_for_huge_model = glm.scale((1/g_max_offset_length, 1/g_max_offset_length,1/g_max_offset_length))
+    M = retouch_scale_for_huge_model * node.get_global_transform() * node.line_transform
     MVP = VP * M
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
     glBindVertexArray(vao)
     glDrawArrays(GL_LINES, 0, 6)
 
     # aux line
-    if len(node.children) > 2:
-        for child in node.children:
-            #if (child.name[0:5].upper() == "RIGHT" or child.name[0:4].upper() == "LEFT") and not (child.offset in [x.offset for x in node.children if x.name != child.name]):
-            #if (child.name[0:5].upper() == "RIGHT" or child.name[0:4].upper() == "LEFT"):
-                #print(child.name, child.offset in [x.offset for x in node.children if x.name != child.name])
-            if  not (child.offset in [x.offset for x in node.children if x.name != child.name]):
-                vao_aux_line = prepare_vao_line_with_offsets(node.offset,child.offset)
-                M = node.get_global_transform()
-                MVP = VP * M
-                glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
-                glBindVertexArray(vao_aux_line)
-                glDrawArrays(GL_LINES, 0, 2)
+    # if len(node.children) > 2:
+    #     for child in node.children:
+    #         if  not (child.offset in [x.offset for x in node.children if x.name != child.name]):
+    #             vao_aux_line = prepare_vao_line_with_offsets(node.offset,child.offset)
+    #             M = retouch_scale_for_huge_model * node.get_global_transform()
+    #             MVP = VP * M
+    #             glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
+    #             glBindVertexArray(vao_aux_line)
+    #             glDrawArrays(GL_LINES, 0, 2)
 
 def draw_node_with_cube(vao, node, VP, unif_locs):
-    M = node.get_global_transform() * node.get_shape_transform()
+    retouch_scale_for_huge_model = glm.scale((1/g_max_offset_length, 1/g_max_offset_length,1/g_max_offset_length))
+    M = retouch_scale_for_huge_model * node.get_global_transform() * node.get_shape_transform()
     MVP = VP * M
     color = node.get_color()
     glUniformMatrix4fv(unif_locs['MVP'], 1, GL_FALSE, glm.value_ptr(MVP))
@@ -1079,11 +1100,14 @@ def main():
     vao_line = prepare_vao_line()
   
     #TODO 처음에 아무것도 안 뜨게.
-    global g_node_list, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max
+    global g_node_list, g_max_offset_length, g_min_offset_length, g_channel_list, g_motion_data, g_motion_data_line_num, g_motion_data_line_max
     bvh_path = os.path.join(fileDirectory,"Project3-bvh","01_01.bvh")
     bvh_path = os.path.join(fileDirectory,"Project3-bvh","sample-spin.bvh")
     bvh_path = os.path.join(fileDirectory,"Project3-bvh","sample-walk.bvh")
-    g_node_list, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
+    bvh_path = os.path.join(fileDirectory,"Project3-bvh","test.bvh")
+    g_node_list, g_max_offset_length, g_min_offset_length, g_channel_list, joint_name_list, frame_count, frame_time, g_motion_data = parse_bvh_file(bvh_path)
+    for node in g_node_list:
+        node.calculate_shape_transform()
     g_motion_data_line_num = 0
     g_motion_data_line_max = len(g_motion_data)
 
