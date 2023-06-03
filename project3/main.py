@@ -262,7 +262,6 @@ class Node:
             self.line_transform =  polygon_rotation * glm.scale(line_shape)
         # node의 child가 없는 경우, JOINT가 END SITE로 끝나지 않은 경우이다.
         else:
-            print("error: the JOINT[",self.name,"] doesn't end with 'End Site'")
             self.shape_transform = glm.scale((0,0,0))         
             self.line_transform =  glm.scale((0,0,0))
             
@@ -610,6 +609,7 @@ def drop_callback(window, paths):
     print("FPS:", 1/g_frame_time)
     print("Number of joints:", len(joint_name_list))
     print("List of all joint names:", joint_name_list)
+    print("") # 엔터
 
 def prepare_vao_frame():
     # prepare vertex data (in main memory)
