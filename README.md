@@ -1,6 +1,8 @@
 # Computer Graphics Projects Overview
 
-이 저장소는 컴퓨터 그래픽스를 배우며 수행한 세 가지 프로젝트를 포함하고 있습니다.
+이 저장소는 컴퓨터 그래픽스를 배우며 수행한 세 가지 프로젝트를 포함하고 있습니다.  
+[Project2 실행 예시](https://www.youtube.com/shorts/pPaTJ1bImMg)  
+[Project3 실행 예시](https://www.youtube.com/shorts/M6AmCLtrXGE)
 
 ## Project 1: Basic OpenGL viewer
 이 프로젝트는 Blender의 조작 방식을 참고하여 Basic OpenGL viewer를 만드는 것을 목표로 합니다.
