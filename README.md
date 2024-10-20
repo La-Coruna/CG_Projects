@@ -1,8 +1,10 @@
 # Computer Graphics Projects Overview
 
-이 저장소는 컴퓨터 그래픽스를 배우며 수행한 세 가지 프로젝트를 포함하고 있습니다.  
-[Project2 실행 예시](https://www.youtube.com/shorts/pPaTJ1bImMg)  
-[Project3 실행 예시](https://www.youtube.com/shorts/M6AmCLtrXGE)
+이 저장소는 컴퓨터 그래픽스를 배우며 진행한 세 가지 프로젝트를 포함하고 있습니다.  
+| Project2 실행 예시 | Project3 실행 예시 |
+|----------------|-------------------|
+| ![Project2 실행 예시 그림](project2/images/figure2.png) | ![Project3 실행 예시 그림](project3/images/figure2.PNG) |
+|[Project2 실행 예시 영상](https://www.youtube.com/shorts/pPaTJ1bImMg)|[Project3 실행 예시 영상](https://www.youtube.com/shorts/M6AmCLtrXGE)|
 
 ## Project 1: Basic OpenGL viewer
 이 프로젝트는 Blender의 조작 방식을 참고하여 Basic OpenGL viewer를 만드는 것을 목표로 합니다.
@@ -15,11 +17,11 @@
 
 ## Project 2: OBJ Viewer & Hierarchical Model Animation
 
-이 프로젝트는 OBJ 파일을 로드하여 뷰어에 렌더링하는 기능과, 계층적 모델을 애니메이션으로 표현하는 기능을 구현합니다.
+이 프로젝트는 OBJ 파일을 로드하여 뷰어에 렌더링하는 기능과, 계층적 모델을 애니메이션을 구현합니다.
 
 ### 주요 기능
 - **OBJ 파일 뷰어**: Drag-and-drop 방식으로 OBJ 파일을 로드하여 단일 메시를 렌더링합니다.
-- **계층적 모델 애니메이션**: 최소 3개의 서로 다른 OBJ 파일로 구성된 3레벨의 계층 모델을 애니메이션으로 렌더링합니다.
+- **계층적 모델 애니메이션**: 서로 다른 OBJ 파일로 구성된 3레벨의 계층 모델을 애니메이션으로 렌더링합니다.
 - **렌더링 모드 전환**: 1번 키로 라인 렌더링, 2번 키로 박스 렌더링 모드로 전환할 수 있습니다.
 - **조명 및 셰이딩**: Phong Illumination과 Phong Shading을 적용하여 사실적인 조명 효과를 구현했습니다.
 
